@@ -1,0 +1,40 @@
+# DEPENDENCIAS (Frontend y Backend)
+node_modules/
+
+# VARIABLES DE ENTORNO Y CLAVES SECRETAS
+.env
+.env.local
+.env.development
+.env.production
+.env*.local
+
+# ARCHIVOS SUBIDOS / MULTIMEDIA (Backend)
+uploads/
+**/uploads/
+**/verificaciones/
+
+# COMPILACIÓN Y BUILDS (Frontend)
+dist/
+build/
+out/
+.next/
+.nuxt/
+
+# LOGS Y ERRORES
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ARCHIVOS DEL SISTEMA OPERATIVO Y EDITORES
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp

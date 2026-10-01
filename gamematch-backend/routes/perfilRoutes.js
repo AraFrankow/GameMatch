@@ -1,0 +1,10 @@
+const express = require('express');
+const router = express.Router();
+const { obtenerMiPerfil, obtenerPerfilPorId, actualizarPerfil, actualizarPlataformas, actualizarJuegos } = require('../controllers/perfilController');
+const { verificarAuth } = require('../middleware/auth');
+router.get('/me', verificarAuth, obtenerMiPerfil);
+router.put('/', verificarAuth, actualizarPerfil);
+router.put('/plataformas', verificarAuth, actualizarPlataformas);
+router.put('/juegos', verificarAuth, actualizarJuegos);
+router.get('/:id', verificarAuth, obtenerPerfilPorId);
+module.exports = router;
