@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { authApi } from './api';
+import VerificacionCamara from './VerificacionCamara'; 
 
 const RANGOS_EDAD = [
   { value: 'menor_18', label: 'Menor de 18' },
@@ -15,6 +16,9 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
   const [exito, setExito] = useState('');
   const [tipoFoto, setTipoFoto] = useState('url');
 
+  // Estado de visibilidad de la cámara
+  const [mostrarCamara, setMostrarCamara] = useState(false);
+
   // Estados de formularios e interfaces de vinculación
   const [mostrarRiotInput, setMostrarRiotInput] = useState(false);
   const [riotForm, setRiotForm] = useState({ game_name: '', tag_line: '', region: 'las' });
@@ -25,7 +29,7 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
   const [cargandoIntegracion, setCargandoIntegracion] = useState(false);
   const [errorIntegracion, setErrorIntegracion] = useState('');
 
-  // Estado proveniente de la API (estructura perfil.steam, perfil.riot, perfil.juegos)
+  const [perfilData, setPerfilData] = useState(null);
   const [datosRiot, setDatosRiot] = useState(null);
   const [datosSteam, setDatosSteam] = useState(null);
   const [juegosLista, setJuegosLista] = useState([]);
@@ -42,6 +46,7 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
     authApi.obtenerMiPerfil(token)
       .then((data) => {        
         const p = data.perfil || data.usuario || data;
+        setPerfilData(p);
         
         const juegosHallados = 
           data.juegos || 
@@ -49,8 +54,6 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
           p.usuario_juegos || 
           p.steam?.juegos || 
           [];
-
-        console.log('Juegos encontrados:', juegosHallados);
 
         setDatosSteam(p.steam || null);
         setDatosRiot(p.riot || null);
@@ -113,7 +116,7 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
     }
   };
 
-  //Vincular Riot Games
+  // Vincular Riot Games
   const handleVincularRiot = async (e) => {
     e.preventDefault();
     setErrorIntegracion('');
@@ -172,6 +175,9 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
 
   const rangoTexto = RANGOS_EDAD.find((r) => r.value === form.rango_edad)?.label || form.rango_edad;
   const esMayorDeEdad = form.rango_edad && form.rango_edad !== 'menor_18';
+  
+  // Estado de verificación del usuario
+  const estaVerificado = perfilData?.verificado || usuario?.verificado;
 
   return (
     <div className="max-w-2xl mx-auto p-4 sm:p-6">
@@ -198,6 +204,11 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
           <div className="text-center sm:text-left flex-1">
             <h2 className="text-2xl font-bold text-white flex items-center justify-center sm:justify-start gap-2">
               {form.username}
+              {estaVerificado && (
+                <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1" title="Edad verificada por IA">
+                  Verificado
+                </span>
+              )}
             </h2>
             <p className="text-white/50 text-xs mt-1">{usuario?.email}</p>
             <span className="inline-block mt-2 bg-primary/20 text-primary border border-primary/30 text-[11px] font-semibold px-2.5 py-0.5 rounded-full">
@@ -226,6 +237,60 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
               <p className="text-white/80 text-sm bg-surface/50 p-3 rounded-xl border border-white/5 min-h-[60px]">
                 {form.biografia || 'Sin descripción por el momento.'}
               </p>
+            </div>
+
+            {/* SECCIÓN DE VERIFICACIÓN DE EDAD POR CÁMARA */}
+            <div>
+              <h3 className="text-xs uppercase text-white/40 font-semibold mb-2">Verificación de Identidad</h3>
+              
+              {estaVerificado ? (
+                <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-xl flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-sm">
+                    ✓
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-emerald-400">Tu edad está verificada</p>
+                    <p className="text-[11px] text-white/50">Tu identidad fue confirmada mediante el sistema de visión artificial.</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-surface/50 border border-white/5 p-4 rounded-xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-medium text-white">Verificar Edad con Webcam</p>
+                      <p className="text-[11px] text-white/40">Tomate una selfie rápida para validar tu rango de edad con IA.</p>
+                    </div>
+                    <button
+                      onClick={() => setMostrarCamara(!mostrarCamara)}
+                      className="text-xs bg-primary hover:bg-primary/90 text-white px-3 py-1.5 rounded-lg transition"
+                    >
+                      {mostrarCamara ? 'Ocultar' : 'Verificar ahora'}
+                    </button>
+                  </div>
+
+                  {mostrarCamara && (
+                    <div className="pt-3 border-t border-white/5">
+                      <VerificacionCamara 
+                        token={token} 
+                        onSuccess={(data) => {
+                          setExito(data?.message || '¡Verificación de edad completada con éxito!');
+                          setMostrarCamara(false);
+                          
+                          // Sincronización inmediata con el estado global de App.jsx y localStorage
+                          if (onActualizarUsuario) {
+                            onActualizarUsuario({
+                              verificado: true,
+                              ...(data?.rango_edad ? { rango_edad: data.rango_edad } : {})
+                            });
+                          }
+                          
+                          cargarPerfil();
+                        }} 
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* CUENTAS VINCULADAS */}
@@ -322,7 +387,7 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
                   )}
                 </div>
 
-                {/*STEAM */}
+                {/* STEAM */}
                 <div className="bg-surface/50 border border-white/5 p-4 rounded-xl flex flex-col gap-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -391,7 +456,6 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
                                 key={juego.id || juego.appid || index}
                                 className="bg-black/40 border border-white/10 hover:border-white/20 text-white/90 text-xs px-2.5 py-1.5 rounded-lg flex items-center gap-2 transition-all group"
                               >
-                                {/* Imagen / Miniatura del juego */}
                                 {juego.imagen_url ? (
                                   <img
                                     src={juego.imagen_url}
@@ -403,10 +467,8 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
                                   <span className="text-xs">🎮</span>
                                 )}
 
-                                {/* Nombre del juego */}
                                 <span className="font-medium">{juego.nombre || juego.name}</span>
 
-                                {/* Horas jugadas */}
                                 {horas > 0 && (
                                   <span className="text-primary font-bold text-[11px] bg-primary/10 px-1.5 py-0.5 rounded">
                                     {horas} hs

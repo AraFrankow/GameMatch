@@ -72,7 +72,7 @@ const buscar = async (req, res) => {
       where: whereUsuario,
       attributes: { exclude: ['password_hash'] },
       include,
-      order: [['createdAt', 'DESC']],
+      order: [['created_at', 'DESC']],
       distinct: true
     });
 

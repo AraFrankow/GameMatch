@@ -2,7 +2,6 @@ const { verificarToken } = require('../utils/jwt');
 const { Usuario, Mensaje, SalaParticipante } = require('../models');
 const { analizarToxicidad, superaUmbral } = require('../utils/moderacion');
 
-// Registro en memoria de usuarios conectados a voz: Map<sala_id, Map<usuario_id, username>>
 const usuariosVozPorSala = new Map();
 
 const obtenerUsuariosVoz = (sala_id) => {
@@ -32,7 +31,6 @@ const registrarChatSocket = (io) => {
     socket.join(`usuario_${uid}`);
     socket.join(`usuario_${Number(uid)}`);
 
-    // 🟢 UNIR AUTOMÁTICAMENTE A TODAS LAS SALAS DEL USUARIO AL CONECTARSE
     try {
       const misSalas = await SalaParticipante.findAll({
         where: { usuario_id: uid },
@@ -64,34 +62,22 @@ const registrarChatSocket = (io) => {
       }
     });
 
-    // 🛠️ NOTIFICAR UNIÓN A SALA
     socket.on('notificar_union_sala', ({ sala_id, usuario_id }) => {
       const sid = Number(sala_id);
       
-      // Suscribir este socket a la sala
       socket.join(`sala_${sid}`);
-      
-      // Notificar a todos los que ya están dentro de esa sala
       io.to(`sala_${sid}`).emit('sala_actualizada', { sala_id: sid });
-
-      // Notificar individualmente al usuario afectado (por si tiene sockets en otros dispositivos)
       if (usuario_id) {
         io.to(`usuario_${Number(usuario_id)}`).emit('sala_actualizada', { sala_id: sid });
       }
     });
 
-    // 🛠️ NOTIFICAR SALIDA DE SALA
     socket.on('notificar_salida_sala', ({ sala_id }) => {
       const sid = Number(sala_id);
-      
-      // Avisar a los participantes restantes en la sala
       io.to(`sala_${sid}`).emit('sala_actualizada', { sala_id: sid });
-      
-      // Retirar socket de la sala
       socket.leave(`sala_${sid}`);
     });
 
-    // Registrar ingreso al canal de voz
     socket.on('unirse_voz_socket', ({ sala_id }) => {
       const sid = Number(sala_id);
       if (!usuariosVozPorSala.has(sid)) {
@@ -105,7 +91,6 @@ const registrarChatSocket = (io) => {
       });
     });
 
-    // Registrar salida del canal de voz
     socket.on('salir_voz_socket', ({ sala_id }) => {
       const sid = Number(sala_id);
       if (usuariosVozPorSala.has(sid)) {
@@ -120,7 +105,19 @@ const registrarChatSocket = (io) => {
 
     socket.on('enviar_mensaje', async ({ sala_id, contenido }) => {
       try {
-        if (!contenido || !contenido.trim()) return socket.emit('error_chat', { error: 'El mensaje no puede estar vacio' });
+      const uid = socket.usuario.id;
+
+          const usuarioDB = await Usuario.findByPk(uid);
+
+          if (!usuarioDB || !usuarioDB.verificado) {
+            return socket.emit('error_chat', { 
+              error: 'Debes verificar tu edad con la cámara para poder chatear.' 
+            });
+          }
+
+        socket.usuario = usuarioDB;
+
+        if (!contenido || !contenido.trim()) return socket.emit('error_chat', { error: 'El mensaje no puede estar vacío' });
 
         const sid = Number(sala_id);
         const participantes = await SalaParticipante.findAll({
@@ -146,7 +143,7 @@ const registrarChatSocket = (io) => {
           sala_id: sid,
           contenido: mensaje.contenido,
           emisor_id: uid,
-          emisor: { id: socket.usuario.id, username: socket.usuario.username, foto_perfil: socket.usuario.foto_perfil },
+          emisor: { id: usuarioDB.id, username: usuarioDB.username, foto_perfil: usuarioDB.foto_perfil },
           created_at: mensaje.createdAt || new Date()
         });
       } catch (err) {
@@ -155,9 +152,8 @@ const registrarChatSocket = (io) => {
       }
     });
 
-    // Limpiar presencia de voz al desconectarse
     socket.on('disconnect', () => {
-      console.log(`🔌 Socket desconectado: ${socket.usuario.username}`);
+      console.log(`Socket desconectado: ${socket.usuario.username}`);
       usuariosVozPorSala.forEach((mapaUsuarios, sid) => {
         if (mapaUsuarios.has(uid)) {
           mapaUsuarios.delete(uid);

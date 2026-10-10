@@ -85,10 +85,29 @@ export default function App() {
       localStorage.setItem('gm_usuario', JSON.stringify(actualizada.usuario));
       return actualizada;
     });
+
+    // Reconectar socket con los datos frescos del usuario
+    socket.disconnect();
+    socket.connect();
   };
 
   useEffect(() => {
     if (sesion?.token) {
+      // Sincronizar datos del usuario directo desde MySQL
+      authApi.obtenerMiPerfil(sesion.token)
+        .then((data) => {
+          const p = data.perfil || data.usuario || data;
+          if (p && (p.verificado !== sesion.usuario?.verificado || p.rango_edad !== sesion.usuario?.rango_edad)) {
+            setSesion((prev) => {
+              if (!prev) return null;
+              const actualizada = { ...prev, usuario: { ...prev.usuario, ...p } };
+              localStorage.setItem('gm_usuario', JSON.stringify(actualizada.usuario));
+              return actualizada;
+            });
+          }
+        })
+        .catch(() => {});
+
       authApi.misInvitaciones(sesion.token)
         .then((data) => setNotificaciones(data.invitaciones || []))
         .catch(() => {});
@@ -128,7 +147,7 @@ export default function App() {
         socket.disconnect();
       };
     }
-  }, [sesion]);
+  }, [sesion?.token]);
 
   const aceptarInvitacion = async (notificacion) => {
     if (!sesion?.token || !sesion?.usuario) return;
@@ -346,6 +365,7 @@ export default function App() {
               token={sesion.token} 
               usuario={sesion.usuario} 
               onVolver={() => setVista('busqueda')}
+              onIrAVerificacion={() => setVista('perfil')}
               mensajesNoLeidos={mensajesNoLeidos}
               setMensajesNoLeidos={setMensajesNoLeidos}
               setSalaActivaId={setSalaActivaId}

@@ -73,4 +73,28 @@ export const authApi = {
       method: 'DELETE', 
       headers: authHeaders(token) 
     }).then(manejarRespuesta),
+
+    verificarEdad: async (token, imagenBase64) => {
+      const res = await fetch('http://localhost:3000/api/usuarios/verificar-edad', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ imagen: imagenBase64 })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al verificar la imagen');
+      return data;
+    },
+
+    obtenerPerfilUsuario: async (token, usuarioId) => {
+    const res = await fetch(`${API_URL}/usuarios/${usuarioId}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || data.error || 'Error al obtener el perfil');
+    return data;
+  },
 };

@@ -4,7 +4,15 @@ import { authApi } from './api';
 import { socket } from './socket';
 import ModalPerfilUsuario from './ModalPerfilUsuario';
 
-export default function Chat({ token, usuario, onVolver, mensajesNoLeidos = {}, setMensajesNoLeidos, setSalaActivaId }) {
+export default function Chat({ 
+  token, 
+  usuario, 
+  onVolver, 
+  onIrAVerificacion, 
+  mensajesNoLeidos = {}, 
+  setMensajesNoLeidos, 
+  setSalaActivaId 
+}) {
   const [salas, setSalas] = useState([]);
   const [salaActiva, setSalaActiva] = useState(null);
   const [mensajes, setMensajes] = useState([]);
@@ -26,6 +34,9 @@ export default function Chat({ token, usuario, onVolver, mensajesNoLeidos = {}, 
   const [usuariosEnVozSala, setUsuariosEnVozSala] = useState([]);
   const clienteAgoraRef = useRef(null);
   const trackLocalRef = useRef(null);
+
+  // Flag de verificación de edad
+  const estaVerificado = usuario?.verificado;
 
   // Sincronizar sala activa con App.jsx y mantener referencia actualizada
   useEffect(() => {
@@ -49,7 +60,6 @@ export default function Chat({ token, usuario, onVolver, mensajesNoLeidos = {}, 
       const nuevasSalas = data.salas || [];
       setSalas(nuevasSalas);
 
-      // Si hay una sala activa abierta, actualizar sus datos (ej: nuevos miembros)
       if (salaActivaRef.current) {
         const salaActualizada = nuevasSalas.find(s => Number(s.id) === Number(salaActivaRef.current.id));
         if (salaActualizada) {
@@ -135,6 +145,10 @@ export default function Chat({ token, usuario, onVolver, mensajesNoLeidos = {}, 
 
   const enviarMensaje = (e) => {
     e.preventDefault();
+    if (!estaVerificado) {
+      setError('Debes verificar tu edad para enviar mensajes.');
+      return;
+    }
     if (!texto.trim() || !salaActiva) return;
     socket.emit('enviar_mensaje', { sala_id: salaActiva.id, contenido: texto });
     setTexto('');
@@ -165,6 +179,10 @@ export default function Chat({ token, usuario, onVolver, mensajesNoLeidos = {}, 
   };
 
   const unirseAVoz = async () => {
+    if (!estaVerificado) {
+      setErrorVoz('Debes verificar tu edad para ingresar a llamadas de voz.');
+      return;
+    }
     setErrorVoz('');
     try {
       const { appId, channel, token: rtcToken, uid } = await authApi.tokenVoz(token, salaActiva.id);
@@ -293,7 +311,7 @@ export default function Chat({ token, usuario, onVolver, mensajesNoLeidos = {}, 
       </div>
 
       {/* Área principal del Chat */}
-      <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden">
+      <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden relative">
         {!salaActiva ? (
           <div className="flex-1 flex items-center justify-center text-white/30 text-sm">
             Elegí una sala de la izquierda
@@ -366,7 +384,15 @@ export default function Chat({ token, usuario, onVolver, mensajesNoLeidos = {}, 
                 )}
 
                 {!enVoz ? (
-                  <button onClick={unirseAVoz} className="bg-repVerde/80 hover:bg-repVerde text-white text-xs rounded-lg px-3 py-1.5 transition">
+                  <button 
+                    onClick={unirseAVoz} 
+                    disabled={!estaVerificado}
+                    className={`text-xs rounded-lg px-3 py-1.5 transition ${
+                      estaVerificado 
+                        ? 'bg-repVerde/80 hover:bg-repVerde text-white' 
+                        : 'bg-white/10 text-white/30 cursor-not-allowed'
+                    }`}
+                  >
                     Unirse a la llamada {usuariosEnVozSala.length > 0 ? `(${usuariosEnVozSala.length})` : ''}
                   </button>
                 ) : (
@@ -386,7 +412,7 @@ export default function Chat({ token, usuario, onVolver, mensajesNoLeidos = {}, 
             {errorVoz && <p className="bg-repRojo/10 text-repRojo text-xs px-3 py-2 shrink-0">{errorVoz}</p>}
 
             {/* Mensajes */}
-            <div ref={mensajesRef} className="flex-1 overflow-y-auto p-4 space-y-2 min-h-0">
+            <div ref={mensajesRef} className={`flex-1 overflow-y-auto p-4 space-y-2 min-h-0 ${!estaVerificado ? 'blur-sm select-none pointer-events-none' : ''}`}>
               {mensajes.map((m) => {
                 const esMio = (m.emisor?.id || m.emisor_id) === usuario.id;
                 return (
@@ -406,15 +432,43 @@ export default function Chat({ token, usuario, onVolver, mensajesNoLeidos = {}, 
             <form onSubmit={enviarMensaje} className="p-3 bg-card border-t border-white/10 flex gap-2 shrink-0">
               <input
                 type="text"
+                disabled={!estaVerificado}
                 value={texto}
                 onChange={(e) => setTexto(e.target.value)}
-                placeholder="Escribe un mensaje..."
-                className="flex-1 bg-surface border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-primary"
+                placeholder={estaVerificado ? "Escribe un mensaje..." : "Chat bloqueado hasta verificar tu edad"}
+                className="flex-1 bg-surface border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-primary disabled:opacity-40 disabled:cursor-not-allowed"
               />
-              <button type="submit" className="bg-primary hover:bg-primary/90 text-white text-sm px-4 py-2 rounded-lg font-medium transition">
+              <button 
+                type="submit" 
+                disabled={!estaVerificado}
+                className="bg-primary hover:bg-primary/90 disabled:bg-white/10 disabled:text-white/30 disabled:cursor-not-allowed text-white text-sm px-4 py-2 rounded-lg font-medium transition"
+              >
                 Enviar
               </button>
             </form>
+
+            {/* OVERLAY DE BLOQUEO DE VERIFICACIÓN */}
+            {!estaVerificado && (
+              <div className="absolute inset-0 bg-surface/90 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center z-40">
+                <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/30 flex items-center justify-center mb-4 text-3xl shadow-lg">
+                  🔒
+                </div>
+                <h3 className="text-white font-bold text-lg mb-2">
+                  Chat y Llamadas Bloqueadas
+                </h3>
+                <p className="text-white/60 text-xs max-w-sm mb-6 leading-relaxed">
+                  Para garantizar la seguridad de la comunidad y un entorno libre de cuentas falsas, debes verificar tu identidad con la cámara antes de enviar mensajes o unirte a salas.
+                </p>
+                {onIrAVerificacion && (
+                  <button
+                    onClick={onIrAVerificacion}
+                    className="bg-primary hover:bg-primary/90 text-white font-medium text-sm px-5 py-2.5 rounded-xl transition shadow-lg shadow-primary/20"
+                  >
+                    Verificar mi edad ahora
+                  </button>
+                )}
+              </div>
+            )}
           </>
         )}
       </div>
