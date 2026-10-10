@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { authApi } from './api';
+import { authApi } from '../api';
 
 export default function ModalPerfilUsuario({ token, usuarioId, usuarioActual, onClose, onIrAlChat }) {
   const [perfil, setPerfil] = useState(null);

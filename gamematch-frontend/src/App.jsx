@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
 import { authApi } from './api';
-import Busqueda from './Busqueda';
-import Chat from './Chat';
-import MiPerfil from './MiPerfil';
-import Landing from './Landing';
+import Busqueda from './components/Busqueda';
+import Chat from './components/Chat';
+import MiPerfil from './components/MiPerfil';
+import Landing from './components/Landing';
 import { socket } from './socket';
 
 const RANGOS_EDAD = [

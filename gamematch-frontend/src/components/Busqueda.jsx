@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { authApi } from './api';
+import { authApi } from '../api';
 import ModalPerfilUsuario from './ModalPerfilUsuario';
 
 const MODOS = [

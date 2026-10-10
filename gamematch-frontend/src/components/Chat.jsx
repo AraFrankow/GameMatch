@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import AgoraRTC from 'agora-rtc-sdk-ng';
-import { authApi } from './api';
-import { socket } from './socket';
+import { authApi } from '../api';
+import { socket } from '../socket';
 import ModalPerfilUsuario from './ModalPerfilUsuario';
 
 export default function Chat({ 
@@ -35,10 +35,8 @@ export default function Chat({
   const clienteAgoraRef = useRef(null);
   const trackLocalRef = useRef(null);
 
-  // Flag de verificación de edad
   const estaVerificado = usuario?.verificado;
 
-  // Sincronizar sala activa con App.jsx y mantener referencia actualizada
   useEffect(() => {
     salaActivaRef.current = salaActiva;
     if (setSalaActivaId) {
@@ -75,7 +73,6 @@ export default function Chat({
     cargarSalas();
   }, [cargarSalas]);
 
-  // Escuchadores de Sockets
   useEffect(() => {
     const handleMensajeNuevo = (msg) => {
       const msgSalaId = Number(msg.sala_id);
