@@ -87,6 +87,8 @@ const buscar = async (req, res) => {
         username: plano.username,
         foto_perfil: plano.foto_perfil,
         rango_edad: plano.rango_edad,
+        verificado: plano.verificado,
+        edad_estimada: plano.edad_estimada,
         usa_microfono: plano.usa_microfono,
         modo_juego: plano.modo_juego,
         estado: plano.estado,

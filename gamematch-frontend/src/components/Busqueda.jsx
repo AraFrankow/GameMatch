@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { authApi } from '../api';
 import ModalPerfilUsuario from './ModalPerfilUsuario';
+import BadgeVerificado from './BadgeVerificado';
 
 const MODOS = [
   { value: '', label: 'Cualquiera' }, { value: 'competitivo', label: 'Competitivo' },
@@ -29,7 +30,7 @@ function Select({ label, ...props }) {
   );
 }
 
-export default function Busqueda({ token, usuario, onVolver, onIrAlChat }) {
+export default function Busqueda({ token, usuario, onIrAlChat }) {
   const [juegosCatalogo, setJuegosCatalogo] = useState([]);
   const [filtros, setFiltros] = useState({ juego_id: '', modo_juego: '', rango_edad: '', usa_microfono: '', plataforma: '' });
   const [resultados, setResultados] = useState(null);
@@ -54,13 +55,15 @@ export default function Busqueda({ token, usuario, onVolver, onIrAlChat }) {
     <div className="min-h-screen bg-gm-gradient p-4">
       <div className="max-w-2xl mx-auto">
         <div className="flex items-center justify-between mb-4">
-          <h1 className="text-xl font-bold text-white">Buscar jugadores</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-bold text-white">Buscar jugadores</h1>
+          </div>
           <div className="flex gap-3">
-            <button onClick={() => setMostrarBloqueados(true)} className="text-white/50 text-sm hover:text-white">Bloqueados</button>
+            <button onClick={() => setMostrarBloqueados(true)} className="text-white/50 text-sm hover:text-white transition">Bloqueados</button>
           </div>
         </div>
 
-        <div className="bg-card border border-white/10 rounded-2xl p-4 mb-4">
+        <div className="bg-card border border-white/10 rounded-2xl p-4 mb-4 shadow-xl">
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-3">
             <Select label="Juego" name="juego_id" value={filtros.juego_id} onChange={actualizarFiltro}>
               <option value="">Cualquiera</option>
@@ -74,7 +77,7 @@ export default function Busqueda({ token, usuario, onVolver, onIrAlChat }) {
             </Select>
           </div>
           {!usuario.es_premium && <p className="text-premium/70 text-xs mb-3">⭐ Con premium podés filtrar por verificados, reputación mínima y rol.</p>}
-          <button onClick={buscar} disabled={cargando} className="w-full bg-primary hover:bg-primary/90 text-white font-medium rounded-lg py-2 text-sm transition disabled:opacity-50">
+          <button onClick={buscar} disabled={cargando} className="w-full bg-primary hover:bg-primary/90 text-white font-medium rounded-lg py-2 text-sm transition disabled:opacity-50 shadow-md">
             {cargando ? 'Buscando...' : 'Buscar'}
           </button>
         </div>
@@ -106,6 +109,8 @@ function CardUsuario({ usuario, usuarioActual, token, onBloqueado, onIrAlChat })
   const [comentario, setComentario] = useState('');
   const [estadoAccion, setEstadoAccion] = useState('');
   const [cargando, setCargando] = useState(false);
+
+  const esVerificado = Boolean(usuario.verificado);
 
   const iniciarChatPrivado = async () => {
     setCargando(true);
@@ -141,31 +146,51 @@ function CardUsuario({ usuario, usuarioActual, token, onBloqueado, onIrAlChat })
   };
 
   return (
-    <div className="bg-card border border-white/10 rounded-xl p-3">
+    <div className="bg-card border border-white/10 rounded-xl p-3 hover:border-white/20 transition shadow-md">
       <div className="flex items-center gap-3">
-        <div className="w-11 h-11 rounded-full bg-surface flex items-center justify-center text-white/40 text-lg overflow-hidden shrink-0 cursor-pointer" onClick={() => setVerPerfil(true)}>
-          {usuario.foto_perfil ? <img src={usuario.foto_perfil} alt="" className="w-full h-full object-cover" /> : usuario.username[0].toUpperCase()}
+        <div className="w-11 h-11 rounded-full bg-surface flex items-center justify-center text-white/40 text-lg overflow-hidden shrink-0 cursor-pointer border border-white/10" onClick={() => setVerPerfil(true)}>
+          {usuario.foto_perfil ? <img src={usuario.foto_perfil} alt="" className="w-full h-full object-cover" /> : usuario.username?.[0]?.toUpperCase()}
         </div>
+        
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-white font-medium truncate cursor-pointer hover:underline" onClick={() => setVerPerfil(true)}>{usuario.username}</span>
-            {usuario.es_premium && <span className="text-premium text-xs">⭐</span>}
+            <span className="text-white font-medium truncate cursor-pointer hover:underline" onClick={() => setVerPerfil(true)}>
+              {usuario.username}
+            </span>
+            {usuario.es_premium && <span className="text-premium text-xs" title="Usuario Premium">⭐</span>}
+            
+            {/* Insignia de Verificado */}
+            <BadgeVerificado verificado={usuario.verificado} edadEstimada={usuario.edad_estimada} />
           </div>
+
           <div className="flex items-center gap-1.5 mt-0.5">
-            <span className={`w-1.5 h-1.5 rounded-full ${ESTADO_COLOR[usuario.estado]}`} />
-            <span className="text-white/50 text-xs">{ESTADO_LABEL[usuario.estado]}</span>
+            <span className={`w-1.5 h-1.5 rounded-full ${ESTADO_COLOR[usuario.estado] || 'bg-white/30'}`} />
+            <span className="text-white/50 text-xs">{ESTADO_LABEL[usuario.estado] || 'Desconectado'}</span>
             {usuario.reputacion_porcentaje !== null && <span className="text-white/40 text-xs">· {usuario.reputacion_porcentaje}% rep</span>}
           </div>
-          {usuario.juegos.length > 0 && <p className="text-white/40 text-xs mt-1 truncate">{usuario.juegos.map((j) => j.nombre).join(', ')}</p>}
+
+          {usuario.juegos && usuario.juegos.length > 0 && (
+            <p className="text-white/40 text-xs mt-1 truncate">
+              {usuario.juegos.map((j) => j.nombre || j.name).join(', ')}
+            </p>
+          )}
           <p className="text-white/30 text-xs mt-0.5">id: {usuario.id}</p>
         </div>
-        <div className="flex gap-1 shrink-0">{usuario.plataformas.map((p) => <span key={p} className="text-[10px] bg-surface text-white/50 px-1.5 py-0.5 rounded">{p}</span>)}</div>
+
+        <div className="flex gap-1 shrink-0">
+          {usuario.plataformas && usuario.plataformas.map((p) => (
+            <span key={p} className="text-[10px] bg-surface text-white/50 px-1.5 py-0.5 rounded border border-white/5 uppercase">
+              {p}
+            </span>
+          ))}
+        </div>
+
         <button onClick={() => setMenuAbierto(!menuAbierto)} className="text-white/30 hover:text-white/70 text-lg leading-none px-1 shrink-0">⋮</button>
       </div>
 
       {menuAbierto && !formReporte && (
         <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-white/5">
-          <button onClick={iniciarChatPrivado} disabled={cargando} className="bg-primary hover:bg-primary/90 text-white text-xs rounded-lg py-1.5 transition disabled:opacity-50">
+          <button onClick={iniciarChatPrivado} disabled={cargando} className="bg-primary hover:bg-primary/90 text-white text-xs rounded-lg py-1.5 transition disabled:opacity-50 font-medium">
             Hablar
           </button>
           <button onClick={() => setVerPerfil(true)} className="bg-surface hover:bg-white/10 text-white/80 text-xs rounded-lg py-1.5 transition">
@@ -223,7 +248,7 @@ function MisBloqueados({ token, onVolver }) {
       <div className="max-w-2xl mx-auto">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-xl font-bold text-white">Bloqueados</h1>
-          <button onClick={onVolver} className="text-white/50 text-sm hover:text-white">← Volver a buscar</button>
+          <button onClick={onVolver} className="text-white/50 text-sm hover:text-white transition">← Volver a buscar</button>
         </div>
         {error && <p className="text-repRojo text-sm mb-3 bg-repRojo/10 rounded-lg px-3 py-2">{error}</p>}
         {bloqueados && bloqueados.length === 0 && <p className="text-white/40 text-sm text-center py-8">No bloqueaste a nadie todavía.</p>}

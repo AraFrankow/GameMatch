@@ -105,15 +105,12 @@ const registrarChatSocket = (io) => {
 
     socket.on('enviar_mensaje', async ({ sala_id, contenido }) => {
       try {
-      const uid = socket.usuario.id;
+        const uid = socket.usuario.id;
+        const usuarioDB = await Usuario.findByPk(uid);
 
-          const usuarioDB = await Usuario.findByPk(uid);
-
-          if (!usuarioDB || !usuarioDB.verificado) {
-            return socket.emit('error_chat', { 
-              error: 'Debes verificar tu edad con la cámara para poder chatear.' 
-            });
-          }
+        if (!usuarioDB) {
+          return socket.emit('error_chat', { error: 'Usuario no encontrado' });
+        }
 
         socket.usuario = usuarioDB;
 
@@ -143,7 +140,12 @@ const registrarChatSocket = (io) => {
           sala_id: sid,
           contenido: mensaje.contenido,
           emisor_id: uid,
-          emisor: { id: usuarioDB.id, username: usuarioDB.username, foto_perfil: usuarioDB.foto_perfil },
+          emisor: { 
+            id: usuarioDB.id, 
+            username: usuarioDB.username, 
+            foto_perfil: usuarioDB.foto_perfil,
+            verificado: Boolean(usuarioDB.verificado)
+          },
           created_at: mensaje.createdAt || new Date()
         });
       } catch (err) {

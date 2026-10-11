@@ -16,10 +16,9 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
   const [exito, setExito] = useState('');
   const [tipoFoto, setTipoFoto] = useState('url');
 
-  // Estado de visibilidad de la cámara
   const [mostrarCamara, setMostrarCamara] = useState(false);
+  const [edadVerificada, setEdadVerificada] = useState(null);
 
-  // Estados de formularios e interfaces de vinculación
   const [mostrarRiotInput, setMostrarRiotInput] = useState(false);
   const [riotForm, setRiotForm] = useState({ game_name: '', tag_line: '', region: 'las' });
 
@@ -41,7 +40,6 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
     biografia: usuario?.biografia || '',
   });
 
-  // Cargar perfil e integraciones desde el backend
   const cargarPerfil = () => {
     authApi.obtenerMiPerfil(token)
       .then((data) => {        
@@ -58,6 +56,10 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
         setDatosSteam(p.steam || null);
         setDatosRiot(p.riot || null);
         setJuegosLista(juegosHallados);
+
+        if (p.edad_estimada || p.edadEstimada) {
+          setEdadVerificada(p.edad_estimada || p.edadEstimada);
+        }
 
         setForm({
           username: p.username || '',
@@ -116,7 +118,6 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
     }
   };
 
-  // Vincular Riot Games
   const handleVincularRiot = async (e) => {
     e.preventDefault();
     setErrorIntegracion('');
@@ -134,7 +135,6 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
     }
   };
 
-  // Vincular Steam
   const handleVincularSteam = async (e) => {
     e.preventDefault();
     setErrorIntegracion('');
@@ -156,7 +156,6 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
     }
   };
 
-  // Desvincular integraciones
   const handleDesvincular = async (plataforma) => {
     if (!window.confirm(`¿Seguro que querés desvincular tu cuenta de ${plataforma}?`)) return;
     setErrorIntegracion('');
@@ -176,8 +175,8 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
   const rangoTexto = RANGOS_EDAD.find((r) => r.value === form.rango_edad)?.label || form.rango_edad;
   const esMayorDeEdad = form.rango_edad && form.rango_edad !== 'menor_18';
   
-  // Estado de verificación del usuario
   const estaVerificado = perfilData?.verificado || usuario?.verificado;
+  const edadMostrar = edadVerificada || perfilData?.edad_estimada || usuario?.edad_estimada;
 
   return (
     <div className="max-w-2xl mx-auto p-4 sm:p-6">
@@ -189,7 +188,6 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
       </button>
 
       <div className="bg-card border border-white/10 rounded-2xl p-6 shadow-xl">
-        {/* Cabecera del Perfil */}
         <div className="flex flex-col sm:flex-row items-center gap-5 border-b border-white/10 pb-6 mb-6">
           <div className="relative group">
             <div className="w-24 h-24 rounded-full bg-surface border-2 border-primary/50 overflow-hidden flex items-center justify-center text-3xl font-bold text-white shadow-lg">
@@ -205,8 +203,8 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
             <h2 className="text-2xl font-bold text-white flex items-center justify-center sm:justify-start gap-2">
               {form.username}
               {estaVerificado && (
-                <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1" title="Edad verificada por IA">
-                  Verificado
+                <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-semibold px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-sm" title="Edad verificada por Amazon AWS Rekognition">
+                  ✓ Verificado {edadMostrar ? `(${edadMostrar} años)` : ''}
                 </span>
               )}
             </h2>
@@ -226,9 +224,8 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
           )}
         </div>
 
-        {/* Mensajes de Estado */}
         {error && <p className="bg-repRojo/10 text-repRojo text-xs p-3 rounded-xl mb-4">{error}</p>}
-        {exito && <p className="bg-repVerde/10 text-repVerde text-xs p-3 rounded-xl mb-4">{exito}</p>}
+        {exito && <p className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs p-3 rounded-xl mb-4 font-medium">{exito}</p>}
 
         {!editando ? (
           <div className="space-y-6">
@@ -239,7 +236,6 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
               </p>
             </div>
 
-            {/* SECCIÓN DE VERIFICACIÓN DE EDAD POR CÁMARA */}
             <div>
               <h3 className="text-xs uppercase text-white/40 font-semibold mb-2">Verificación de Identidad</h3>
               
@@ -249,8 +245,15 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
                     ✓
                   </div>
                   <div>
-                    <p className="text-xs font-semibold text-emerald-400">Tu edad está verificada</p>
-                    <p className="text-[11px] text-white/50">Tu identidad fue confirmada mediante el sistema de visión artificial.</p>
+                    <p className="text-xs font-semibold text-emerald-400 flex items-center gap-2">
+                      Tu edad está verificada
+                      {edadMostrar && (
+                        <span className="bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
+                          {edadMostrar} años
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-[11px] text-white/50">Identidad confirmada mediante la API de visión artificial de Amazon AWS Rekognition.</p>
                   </div>
                 </div>
               ) : (
@@ -258,11 +261,11 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-xs font-medium text-white">Verificar Edad con Webcam</p>
-                      <p className="text-[11px] text-white/40">Tomate una selfie rápida para validar tu rango de edad con IA.</p>
+                      <p className="text-[11px] text-white/40">Tomate una selfie rápida para validar tu edad y obtener tu insignia de verificación.</p>
                     </div>
                     <button
                       onClick={() => setMostrarCamara(!mostrarCamara)}
-                      className="text-xs bg-primary hover:bg-primary/90 text-white px-3 py-1.5 rounded-lg transition"
+                      className="text-xs bg-primary hover:bg-primary/90 text-white px-3 py-1.5 rounded-lg transition font-medium"
                     >
                       {mostrarCamara ? 'Ocultar' : 'Verificar ahora'}
                     </button>
@@ -273,17 +276,27 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
                       <VerificacionCamara 
                         token={token} 
                         onSuccess={(data) => {
-                          setExito(data?.message || '¡Verificación de edad completada con éxito!');
+                          const edadCalculada = data?.edad_estimada || data?.edadEstimada;
+                          const nuevoRango = data?.rango_edad || data?.rangoEdad;
+                          
+                          if (edadCalculada) setEdadVerificada(edadCalculada);
+                          if (nuevoRango) {
+                            setForm((prev) => ({ ...prev, rango_edad: nuevoRango }));
+                          }
+
+                          const mensajeTexto = data?.message || data?.mensaje || 
+                            `Rostro verificado correctamente con AWS${edadCalculada ? ` (${edadCalculada} años)` : ''}.`;
+                          
+                          setExito(mensajeTexto);
                           setMostrarCamara(false);
                           
-                          // Sincronización inmediata con el estado global de App.jsx y localStorage
                           if (onActualizarUsuario) {
                             onActualizarUsuario({
                               verificado: true,
-                              ...(data?.rango_edad ? { rango_edad: data.rango_edad } : {})
+                              edad_estimada: edadCalculada,
+                              rango_edad: nuevoRango || usuario?.rango_edad
                             });
                           }
-                          
                           cargarPerfil();
                         }} 
                       />
@@ -293,7 +306,6 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
               )}
             </div>
 
-            {/* CUENTAS VINCULADAS */}
             <div>
               <h3 className="text-xs uppercase text-white/40 font-semibold mb-2">Cuentas Vinculadas</h3>
               
@@ -302,7 +314,6 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
               )}
 
               <div className="space-y-3">
-                {/* RIOT GAMES */}
                 <div className="bg-surface/50 border border-white/5 p-4 rounded-xl flex flex-col gap-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -376,7 +387,6 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
                     </form>
                   )}
 
-                  {/* Detalle Rango de Riot */}
                   {datosRiot && (
                     <div className="pt-2 border-t border-white/5 bg-black/20 p-2.5 rounded-lg flex items-center justify-between text-xs">
                       <span className="text-yellow-400 font-bold">Rango del LoL:</span>
@@ -387,7 +397,6 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
                   )}
                 </div>
 
-                {/* STEAM */}
                 <div className="bg-surface/50 border border-white/5 p-4 rounded-xl flex flex-col gap-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -439,7 +448,6 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
                     </form>
                   )}
 
-                  {/* Juegos Importados de Steam */}
                   {datosSteam && (
                     <div className="pt-2 border-t border-white/5 space-y-1.5">
                       <p className="text-[11px] font-semibold text-white/50">

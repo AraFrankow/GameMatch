@@ -20,7 +20,10 @@ const crearSala = async (req, res) => {
 
       const salasCreador = await SalaParticipante.findAll({ where: { usuario_id: creador_id } });
       const idsSalasCreador = salasCreador.map((s) => s.sala_id);
-      const salaExistente = await Sala.findOne({ where: { id: { [Op.in]: idsSalasCreador }, tipo: 'privada' }, include: [{ model: SalaParticipante, as: 'salaParticipantes', where: { usuario_id: participante_id } }] });
+      const salaExistente = await Sala.findOne({ 
+        where: { id: { [Op.in]: idsSalasCreador }, tipo: 'privada' }, 
+        include: [{ model: SalaParticipante, as: 'salaParticipantes', where: { usuario_id: participante_id } }] 
+      });
       if (salaExistente) return res.json({ sala: salaExistente, yaExistia: true });
 
       const sala = await Sala.create({ creador_id, tipo: 'privada', max_participantes: 2 });
@@ -31,18 +34,45 @@ const crearSala = async (req, res) => {
     const sala = await Sala.create({ creador_id, tipo: 'grupal', nombre: nombre || null, max_participantes: MAX_GRUPAL });
     await SalaParticipante.create({ sala_id: sala.id, usuario_id: creador_id });
     return res.status(201).json({ sala });
-  } catch (err) { console.error('Error en crearSala:', err); return res.status(500).json({ error: 'Error al crear la sala' }); }
+  } catch (err) { 
+    console.error('Error en crearSala:', err); 
+    return res.status(500).json({ error: 'Error al crear la sala' }); 
+  }
 };
 
 const listarMisSalas = async (req, res) => {
   try {
     const participaciones = await SalaParticipante.findAll({
       where: { usuario_id: req.usuario.id },
-      include: [{ model: Sala, as: 'sala', include: [{ model: SalaParticipante, as: 'salaParticipantes', include: [{ model: Usuario, as: 'usuario', attributes: ['id', 'username', 'foto_perfil', 'estado'] }] }] }],
+      include: [{ 
+        model: Sala, 
+        as: 'sala', 
+        include: [{ 
+          model: SalaParticipante, 
+          as: 'salaParticipantes', 
+          include: [{ 
+            model: Usuario, 
+            as: 'usuario', 
+            // ATRIBUTOS DE VERIFICACIÓN
+            attributes: ['id', 'username', 'foto_perfil', 'estado', 'verificado', 'edad_estimada', 'rango_edad'] 
+          }] 
+        }] 
+      }],
     });
-    const salas = participaciones.map((p) => ({ id: p.sala.id, tipo: p.sala.tipo, nombre: p.sala.nombre, max_participantes: p.sala.max_participantes, participantes: p.sala.salaParticipantes.map((sp) => sp.usuario) }));
+    
+    const salas = participaciones.map((p) => ({ 
+      id: p.sala.id, 
+      tipo: p.sala.tipo, 
+      nombre: p.sala.nombre, 
+      max_participantes: p.sala.max_participantes, 
+      participantes: p.sala.salaParticipantes.map((sp) => sp.usuario) 
+    }));
+
     return res.json({ salas });
-  } catch (err) { console.error('Error en listarMisSalas:', err); return res.status(500).json({ error: 'Error al listar salas' }); }
+  } catch (err) { 
+    console.error('Error en listarMisSalas:', err); 
+    return res.status(500).json({ error: 'Error al listar salas' }); 
+  }
 };
 
 const invitar = async (req, res) => {
@@ -81,7 +111,10 @@ const invitar = async (req, res) => {
     }
 
     return res.status(201).json({ notificacion });
-  } catch (err) { console.error('Error en invitar:', err); return res.status(500).json({ error: 'Error al invitar usuario' }); }
+  } catch (err) { 
+    console.error('Error en invitar:', err); 
+    return res.status(500).json({ error: 'Error al invitar usuario' }); 
+  }
 };
 
 const listarInvitaciones = async (req, res) => {
@@ -121,7 +154,10 @@ const unirse = async (req, res) => {
     invitacion.leida = true;
     await invitacion.save();
     return res.json({ ok: true, mensaje: 'Te uniste a la sala' });
-  } catch (err) { console.error('Error en unirse:', err); return res.status(500).json({ error: 'Error al unirse a la sala' }); }
+  } catch (err) { 
+    console.error('Error en unirse:', err); 
+    return res.status(500).json({ error: 'Error al unirse a la sala' }); 
+  }
 };
 
 const salir = async (req, res) => {
@@ -136,7 +172,6 @@ const salir = async (req, res) => {
 
     await participacion.destroy();
 
-    // Si la sala se queda sin integrantes, se elimina
     const quedan = await SalaParticipante.count({ where: { sala_id: id } });
     if (quedan === 0) {
       await Sala.destroy({ where: { id } });

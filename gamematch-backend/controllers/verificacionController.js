@@ -1,6 +1,15 @@
 const fs = require('fs');
 const path = require('path');
-const { SolicitudVerificacion } = require('../models');
+const { RekognitionClient, DetectFacesCommand } = require('@aws-sdk/client-rekognition');
+
+// Cliente de AWS Rekognition
+const rekognitionClient = new RekognitionClient({
+  region: process.env.AWS_REGION || 'us-east-1',
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  },
+});
 
 const verificarEdadUsuario = async (req, res) => {
   try {
@@ -11,148 +20,91 @@ const verificarEdadUsuario = async (req, res) => {
       return res.status(400).json({ exito: false, message: 'No se recibió ninguna imagen.' });
     }
 
-    // 1. Petición al microservicio de Python FastAPI
-    const respuestaPython = await fetch('http://127.0.0.1:8000/api/usuarios/verificar-edad', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ imagen })
+    // 1. Convertir Base64 a Buffer binario
+    const base64Data = imagen.replace(/^data:image\/\w+;base64,/, '');
+    const bufferImagen = Buffer.from(base64Data, 'base64');
+
+    // 2. Consulta a AWS Rekognition
+    console.log('Analizando rostro con AWS Rekognition...');
+    const command = new DetectFacesCommand({
+      Image: { Bytes: bufferImagen },
+      Attributes: ['ALL'],
     });
 
-    const resultadoPython = await respuestaPython.json();
+    const awsResponse = await rekognitionClient.send(command);
 
-    if (!respuestaPython.ok || !resultadoPython.exito) {
+    if (!awsResponse.FaceDetails || awsResponse.FaceDetails.length === 0) {
       return res.status(400).json({
         exito: false,
-        message: resultadoPython.error || 'No se pudo verificar el rostro.'
+        message: 'No se detectó ningún rostro en la foto. Enfocate bien frente a la cámara y asegurate de tener buena luz.',
       });
     }
 
-    const edadEstimadaIA = resultadoPython.edad_estimada;
-    const esMayorIA = resultadoPython.es_mayor_de_edad;
+    // 3. Obtener estimación de edad
+    const faceDetail = awsResponse.FaceDetails[0];
+    const { Low: ageMin, High: ageMax } = faceDetail.AgeRange;
+    const edadEstimadaIA = Math.round((ageMin + ageMax) / 2);
+    const esMayorIA = edadEstimadaIA >= 18;
 
-    // Helper para guardar foto de evidencia en servidor estático
-    const guardarFotoEvidencia = () => {
-      const dirEvidencias = path.join(__dirname, '../uploads/evidencias');
-      if (!fs.existsSync(dirEvidencias)) {
-        fs.mkdirSync(dirEvidencias, { recursive: true });
+    console.log(`AWS Rekognition detectó: ${edadEstimadaIA} años (Rango: ${ageMin} - ${ageMax})`);
+
+    // Guardar imagen localmente
+    const dirVerificaciones = path.join(__dirname, '../uploads/verificaciones');
+    if (!fs.existsSync(dirVerificaciones)) {
+      fs.mkdirSync(dirVerificaciones, { recursive: true });
+    }
+    const fileName = `verificacion_user_${usuario.id}_${Date.now()}.jpg`;
+    const filePath = path.join(dirVerificaciones, fileName);
+    fs.writeFileSync(filePath, bufferImagen);
+    const rutaImagenLocal = `/uploads/verificaciones/${fileName}`;
+
+    // 4. Determinar el nuevo rango_edad según el cálculo de AWS
+    let nuevoRangoEdad = usuario.rango_edad;
+
+    if (!esMayorIA) {
+      nuevoRangoEdad = 'menor_18';
+    } else {
+      // Si antes era menor o no tenía rango, lo asignamos al rango 18-25 por defecto
+      if (!usuario.rango_edad || usuario.rango_edad === 'menor_18') {
+        nuevoRangoEdad = '18_25';
       }
+    }
 
-      const fileName = `evidencia_user_${usuario.id}_${Date.now()}.jpg`;
-      const filePath = path.join(dirEvidencias, fileName);
-      const base64Data = imagen.replace(/^data:image\/\w+;base64,/, '');
+    // Determinar mensaje descriptivo para el usuario
+    let mensajeResultado = `¡Rostro verificado con éxito (${edadEstimadaIA} años)!`;
 
-      fs.writeFileSync(filePath, base64Data, 'base64');
-      return `/uploads/evidencias/${fileName}`;
-    };
-
-    // 2. Calcular edad declarada SOLO SI existe fecha_nacimiento
-    let edadDeclarada = null;
-    let esMayorDeclarado = null;
-
-    if (usuario.fecha_nacimiento) {
-      const hoy = new Date();
-      const nacimiento = new Date(usuario.fecha_nacimiento);
-      edadDeclarada = hoy.getFullYear() - nacimiento.getFullYear();
-      const m = hoy.getMonth() - nacimiento.getMonth();
-      if (m < 0 || (m === 0 && hoy.getDate() < nacimiento.getDate())) {
-        edadDeclarada--;
+    if (usuario.rango_edad && usuario.rango_edad !== nuevoRangoEdad) {
+      if (nuevoRangoEdad === 'menor_18') {
+        mensajeResultado = `Verificación completada (${edadEstimadaIA} años). Tu perfil fue reasignado al rango Menor de 18 para mayor seguridad.`;
+      } else {
+        mensajeResultado = `Verificación completada (${edadEstimadaIA} años). Se actualizó tu rango de edad a Mayor de 18.`;
       }
-      esMayorDeclarado = edadDeclarada >= 18;
     }
 
-    // ==================== FLUJO A: USUARIO SIN FECHA DE NACIMIENTO (Google Login) ====================
-    if (esMayorDeclarado === null) {
-      const rangoAsignado = esMayorIA ? 'mayor_18' : 'menor_18';
-      
-      await usuario.update({ 
-        verificado: true, 
-        rango_edad: rangoAsignado 
-      });
+    // 5. Actualizar en Base de Datos
+    await usuario.update({
+      verificado: true,
+      rango_edad: nuevoRangoEdad,
+      edad_estimada: edadEstimadaIA,
+      foto_verificacion: rutaImagenLocal
+    });
 
-      return res.json({
-        exito: true,
-        verificado: true,
-        rango_edad: rangoAsignado,
-        message: `Rostro verificado correctamente. Asignado al entorno de ${esMayorIA ? 'mayores' : 'menores'} de edad.`
-      });
-    }
-
-    // ==================== FLUJO B: MATRIZ COMPLETA (Registro tradicional) ====================
-
-    // CASO 1: Menor declarado + Menor detectado
-    if (!esMayorDeclarado && !esMayorIA) {
-      await usuario.update({ verificado: true, rango_edad: 'menor_18' });
-      return res.json({
-        exito: true,
-        verificado: true,
-        rango_edad: 'menor_18',
-        message: '¡Verificación completada con éxito en el entorno protegido!'
-      });
-    }
-
-    // CASO 2: Menor declarado + Adulto detectado (Bloqueo por sospecha de fraude)
-    if (!esMayorDeclarado && esMayorIA) {
-      const rutaEvidencia = guardarFotoEvidencia();
-
-      await usuario.update({
-        bloqueado: true,
-        motivo_bloqueo: 'Discrepancia de edad: Menor declarado vs Adulto detectado por IA'
-      });
-
-      await SolicitudVerificacion.create({
-        usuario_id: usuario.id,
-        foto_evidencia: rutaEvidencia,
-        edad_declarada: edadDeclarada,
-        edad_estimada_ia: edadEstimadaIA,
-        tipo_caso: 'BLOQUEO_POR_FRAUDE',
-        estado: 'PENDIENTE'
-      });
-
-      return res.status(403).json({
-        exito: false,
-        message: 'Tu cuenta ha sido bloqueada preventivamente por inconsistencias en tu edad. Contacta a un administrador.'
-      });
-    }
-
-    // CASO 3: Adulto declarado + Adulto detectado
-    if (esMayorDeclarado && esMayorIA) {
-      await usuario.update({ verificado: true, rango_edad: 'mayor_18' });
-      return res.json({
-        exito: true,
-        verificado: true,
-        rango_edad: 'mayor_18',
-        message: '¡Rostro detectado y edad verificada con éxito!'
-      });
-    }
-
-    // CASO 4: Adulto declarado + Menor detectado (Reasignación a menor + revisión)
-    if (esMayorDeclarado && !esMayorIA) {
-      const rutaEvidencia = guardarFotoEvidencia();
-
-      await usuario.update({ verificado: true, rango_edad: 'menor_18' });
-
-      await SolicitudVerificacion.create({
-        usuario_id: usuario.id,
-        foto_evidencia: rutaEvidencia,
-        edad_declarada: edadDeclarada,
-        edad_estimada_ia: edadEstimadaIA,
-        tipo_caso: 'REVISION_MAYOR_A_MENOR',
-        estado: 'PENDIENTE'
-      });
-
-      return res.json({
-        exito: true,
-        verificado: true,
-        rango_edad: 'menor_18',
-        message: 'La IA detectó rasgos de menor de edad. Tu perfil fue asignado al entorno protegido mientras un administrador revisa el caso.'
-      });
-    }
+    return res.json({
+      exito: true,
+      verificado: true,
+      rango_edad: nuevoRangoEdad,
+      rangoEdad: nuevoRangoEdad,
+      edad_estimada: edadEstimadaIA,
+      edadEstimada: edadEstimadaIA,
+      message: mensajeResultado,
+      fotoUrl: rutaImagenLocal
+    });
 
   } catch (error) {
-    console.error('Error en el servicio de verificación de edad:', error.message);
+    console.error('Error al procesar con AWS Rekognition:', error);
     return res.status(500).json({
       exito: false,
-      message: 'El servicio de verificación facial no está disponible en este momento.'
+      message: `Error al procesar la verificación con AWS: ${error.message}`
     });
   }
 };

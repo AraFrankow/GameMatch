@@ -3,6 +3,7 @@ import AgoraRTC from 'agora-rtc-sdk-ng';
 import { authApi } from '../api';
 import { socket } from '../socket';
 import ModalPerfilUsuario from './ModalPerfilUsuario';
+import BadgeVerificado from './BadgeVerificado';
 
 export default function Chat({ 
   token, 
@@ -35,7 +36,7 @@ export default function Chat({
   const clienteAgoraRef = useRef(null);
   const trackLocalRef = useRef(null);
 
-  const estaVerificado = usuario?.verificado;
+  const estaVerificado = Boolean(usuario?.verificado);
 
   useEffect(() => {
     salaActivaRef.current = salaActiva;
@@ -44,14 +45,12 @@ export default function Chat({
     }
   }, [salaActiva, setSalaActivaId]);
 
-  // Limpieza al salir de la vista Chat
   useEffect(() => {
     return () => {
       if (setSalaActivaId) setSalaActivaId(null);
     };
   }, [setSalaActivaId]);
 
-  // Función para cargar salas y refrescar la sala activa
   const cargarSalas = useCallback(async () => {
     try {
       const data = await authApi.misSalas(token);
@@ -117,6 +116,7 @@ export default function Chat({
 
   const entrarASala = async (sala) => {
     setError('');
+    setErrorVoz('');
     setMensajes([]);
     setUsuariosEnVozSala([]);
     setSalaActiva(sala);
@@ -142,10 +142,6 @@ export default function Chat({
 
   const enviarMensaje = (e) => {
     e.preventDefault();
-    if (!estaVerificado) {
-      setError('Debes verificar tu edad para enviar mensajes.');
-      return;
-    }
     if (!texto.trim() || !salaActiva) return;
     socket.emit('enviar_mensaje', { sala_id: salaActiva.id, contenido: texto });
     setTexto('');
@@ -175,12 +171,45 @@ export default function Chat({
     }
   };
 
+  const otroUsuario = salaActiva?.tipo === 'privada'
+    ? salaActiva.participantes?.find((p) => (p.usuario_id || p.id) !== usuario.id) ||
+      salaActiva.Usuarios?.find((u) => u.id !== usuario.id)
+    : null;
+
+  const otroVerificado = Boolean(otroUsuario?.verificado);
+
+  const listaMiembros = salaActiva?.tipo === 'grupal'
+    ? (salaActiva.participantes || salaActiva.Usuarios || []).map((p) => ({
+        id: p.usuario_id || p.id || p.Usuario?.id,
+        username: p.username || p.Usuario?.username || 'Usuario',
+        foto_perfil: p.foto_perfil || p.Usuario?.foto_perfil,
+        verificado: Boolean(p.verificado || p.Usuario?.verificado),
+        edad_estimada: p.edad_estimada || p.Usuario?.edad_estimada
+      }))
+    : [];
+
+  // Conexión a voz libre con advertencia previa para el usuario verificado
   const unirseAVoz = async () => {
-    if (!estaVerificado) {
-      setErrorVoz('Debes verificar tu edad para ingresar a llamadas de voz.');
-      return;
-    }
     setErrorVoz('');
+
+    // Advertencia al verificado si hay un usuario sin verificar en la sala
+    if (estaVerificado) {
+      let haySinVerificar = false;
+
+      if (salaActiva?.tipo === 'privada') {
+        haySinVerificar = !otroVerificado;
+      } else if (salaActiva?.tipo === 'grupal') {
+        haySinVerificar = listaMiembros.some((m) => m.id !== usuario.id && !m.verificado);
+      }
+
+      if (haySinVerificar) {
+        const confirmar = window.confirm(
+          '⚠️ Advertencia de seguridad:\n\nHay un usuario sin verificar en esta llamada. ¿Estás seguro de que querés unirte?'
+        );
+        if (!confirmar) return;
+      }
+    }
+
     try {
       const { appId, channel, token: rtcToken, uid } = await authApi.tokenVoz(token, salaActiva.id);
       const cliente = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
@@ -240,11 +269,8 @@ export default function Chat({
 
     try {
       if (enVoz) await salirDeVoz();
-
       await authApi.salirDeSala(token, salaActiva.id);
-      
       socket.emit('notificar_salida_sala', { sala_id: salaActiva.id });
-
       setSalaActiva(null);
       setMensajes([]);
       cargarSalas();
@@ -255,22 +281,9 @@ export default function Chat({
 
   useEffect(() => () => { salirDeVoz(); }, []);
 
-  const otroUsuario = salaActiva?.tipo === 'privada'
-    ? salaActiva.participantes?.find((p) => (p.usuario_id || p.id) !== usuario.id) ||
-      salaActiva.Usuarios?.find((u) => u.id !== usuario.id)
-    : null;
-
-  const listaMiembros = salaActiva?.tipo === 'grupal'
-    ? (salaActiva.participantes || salaActiva.Usuarios || []).map((p) => ({
-        id: p.usuario_id || p.id || p.Usuario?.id,
-        username: p.username || p.Usuario?.username || 'Usuario',
-        foto_perfil: p.foto_perfil || p.Usuario?.foto_perfil,
-      }))
-    : [];
-
   return (
     <div className="h-[calc(100vh-3.8rem)] w-full bg-gm-gradient flex overflow-hidden">
-      {/* Lista de salas */}
+      {/* Lista lateral de salas */}
       <div className="w-64 bg-surface border-r border-white/10 p-3 flex flex-col h-full shrink-0">
         <button onClick={onVolver} className="text-white/50 text-sm hover:text-white mb-3 text-left">← Volver</button>
         <button onClick={crearSalaGrupal} className="bg-primary hover:bg-primary/90 text-white text-sm rounded-lg py-2 mb-3 shrink-0 font-medium">
@@ -282,6 +295,7 @@ export default function Chat({
               ? s.participantes?.find((p) => (p.usuario_id || p.id) !== usuario.id) || s.Usuarios?.find((u) => u.id !== usuario.id)
               : null;
             const cantidadNoLeidos = mensajesNoLeidos[s.id] || 0;
+            const esOtroVerificado = Boolean(otro?.verificado);
 
             return (
               <button
@@ -291,8 +305,9 @@ export default function Chat({
                   salaActiva?.id === s.id ? 'bg-primary text-white' : 'text-white/70 hover:bg-white/5'
                 }`}
               >
-                <span className="truncate">
+                <span className="truncate flex items-center gap-1.5">
                   {s.tipo === 'grupal' ? `${s.nombre || 'Sala grupal'}` : `${otro?.username || 'Chat'}`}
+                  {esOtroVerificado && <span className="text-emerald-400 text-xs">✓</span>}
                 </span>
 
                 {cantidadNoLeidos > 0 && salaActiva?.id !== s.id && (
@@ -307,7 +322,7 @@ export default function Chat({
         </div>
       </div>
 
-      {/* Área principal del Chat */}
+      {/* Ventana de Chat */}
       <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden relative">
         {!salaActiva ? (
           <div className="flex-1 flex items-center justify-center text-white/30 text-sm">
@@ -315,7 +330,7 @@ export default function Chat({
           </div>
         ) : (
           <>
-            {/* Encabezado */}
+            {/* Encabezado de la sala */}
             <div className="bg-card border-b border-white/10 p-3 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">
                 {salaActiva.tipo === 'grupal' ? (
@@ -352,8 +367,12 @@ export default function Chat({
                         (otroUsuario?.username?.[0] || 'U').toUpperCase()
                       )}
                     </div>
-                    <span className="text-white font-medium flex items-center gap-1.5">
+                    <span className="text-white font-medium flex items-center gap-2">
                       {otroUsuario?.username || 'Usuario'}
+                      <BadgeVerificado 
+                        verificado={otroVerificado} 
+                        edadEstimada={otroUsuario?.edad_estimada} 
+                      />
                     </span>
                   </button>
                 )}
@@ -371,7 +390,7 @@ export default function Chat({
                 </div>
               )}
 
-              {/* Controles de Voz */}
+              {/* Controles de Llamada de Voz */}
               <div className="flex items-center gap-2">
                 {usuariosEnVozSala.length > 0 && (
                   <span className="text-repVerde text-xs flex items-center gap-1 font-medium bg-repVerde/10 px-2.5 py-1 rounded-md border border-repVerde/20">
@@ -383,14 +402,9 @@ export default function Chat({
                 {!enVoz ? (
                   <button 
                     onClick={unirseAVoz} 
-                    disabled={!estaVerificado}
-                    className={`text-xs rounded-lg px-3 py-1.5 transition ${
-                      estaVerificado 
-                        ? 'bg-repVerde/80 hover:bg-repVerde text-white' 
-                        : 'bg-white/10 text-white/30 cursor-not-allowed'
-                    }`}
+                    className="text-xs rounded-lg px-3 py-1.5 transition font-medium flex items-center gap-1.5 bg-repVerde/80 hover:bg-repVerde text-white"
                   >
-                    Unirse a la llamada {usuariosEnVozSala.length > 0 ? `(${usuariosEnVozSala.length})` : ''}
+                    <span>Unirse a la llamada {usuariosEnVozSala.length > 0 ? `(${usuariosEnVozSala.length})` : ''}</span>
                   </button>
                 ) : (
                   <>
@@ -406,17 +420,54 @@ export default function Chat({
               </div>
             </div>
 
+            {/* Banner de aviso al conversar con no verificado */}
+            {salaActiva.tipo === 'privada' && otroUsuario && !otroVerificado && (
+              <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 flex items-center gap-2 text-amber-300 text-xs">
+                <span className="text-sm shrink-0">⚠️</span>
+                <p>
+                  <b>Aviso de seguridad:</b> <span className="font-semibold">{otroUsuario.username}</span> aún no ha verificado su edad con la webcam. Tené cuidado.
+                </p>
+              </div>
+            )}
+
+            {/* Banner de sugerencia si el propio usuario no está verificado */}
+            {!estaVerificado && (
+              <div className="bg-primary/10 border-b border-primary/20 px-4 py-2 flex items-center justify-between gap-2 text-white text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm shrink-0">💡</span>
+                  <p className="text-white/80">
+                    Verificá tu edad con la cámara para obtener tu insignia de confianza frente a otros jugadores.
+                  </p>
+                </div>
+                {onIrAVerificacion && (
+                  <button
+                    onClick={onIrAVerificacion}
+                    className="bg-primary hover:bg-primary/90 text-white font-semibold px-3 py-1 rounded-lg text-[11px] shrink-0 transition"
+                  >
+                    Verificar ahora
+                  </button>
+                )}
+              </div>
+            )}
+
             {errorVoz && <p className="bg-repRojo/10 text-repRojo text-xs px-3 py-2 shrink-0">{errorVoz}</p>}
 
-            {/* Mensajes */}
-            <div ref={mensajesRef} className={`flex-1 overflow-y-auto p-4 space-y-2 min-h-0 ${!estaVerificado ? 'blur-sm select-none pointer-events-none' : ''}`}>
+            {/* Historial de Mensajes */}
+            <div ref={mensajesRef} className="flex-1 overflow-y-auto p-4 space-y-2 min-h-0">
               {mensajes.map((m) => {
                 const esMio = (m.emisor?.id || m.emisor_id) === usuario.id;
+                const esEmisorVerificado = Boolean(m.emisor?.verificado);
+
                 return (
                   <div key={m.id} className={`flex ${esMio ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-xs rounded-xl px-3 py-2 text-sm ${esMio ? 'bg-primary text-white' : 'bg-card text-white/90'}`}>
-                      {!esMio && <p className="text-xs text-primary/70 mb-0.5">{m.emisor?.username || 'Usuario'}</p>}
-                      <p>{m.contenido}</p>
+                    <div className={`max-w-xs rounded-xl px-3 py-2 text-sm ${esMio ? 'bg-primary text-white' : 'bg-card text-white/90 border border-white/5'}`}>
+                      {!esMio && (
+                        <p className="text-xs text-primary/80 font-semibold mb-0.5 flex items-center gap-1">
+                          {m.emisor?.username || 'Usuario'}
+                          {esEmisorVerificado && <span className="text-emerald-400 text-[10px]">✓</span>}
+                        </p>
+                      )}
+                      <p className="break-words">{m.contenido}</p>
                     </div>
                   </div>
                 );
@@ -425,52 +476,27 @@ export default function Chat({
 
             {avisoBloqueo && <p className="bg-repRojo/10 text-repRojo text-xs px-3 py-1.5 text-center shrink-0">{avisoBloqueo}</p>}
 
-            {/* Input de envío */}
+            {/* Mensajes de texto */}
             <form onSubmit={enviarMensaje} className="p-3 bg-card border-t border-white/10 flex gap-2 shrink-0">
               <input
                 type="text"
-                disabled={!estaVerificado}
                 value={texto}
                 onChange={(e) => setTexto(e.target.value)}
-                placeholder={estaVerificado ? "Escribe un mensaje..." : "Chat bloqueado hasta verificar tu edad"}
-                className="flex-1 bg-surface border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-primary disabled:opacity-40 disabled:cursor-not-allowed"
+                placeholder="Escribe un mensaje..."
+                className="flex-1 bg-surface border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-primary"
               />
               <button 
                 type="submit" 
-                disabled={!estaVerificado}
-                className="bg-primary hover:bg-primary/90 disabled:bg-white/10 disabled:text-white/30 disabled:cursor-not-allowed text-white text-sm px-4 py-2 rounded-lg font-medium transition"
+                className="bg-primary hover:bg-primary/90 text-white text-sm px-4 py-2 rounded-lg font-medium transition"
               >
                 Enviar
               </button>
             </form>
-
-            {/* OVERLAY DE BLOQUEO DE VERIFICACIÓN */}
-            {!estaVerificado && (
-              <div className="absolute inset-0 bg-surface/90 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center z-40">
-                <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/30 flex items-center justify-center mb-4 text-3xl shadow-lg">
-                  🔒
-                </div>
-                <h3 className="text-white font-bold text-lg mb-2">
-                  Chat y Llamadas Bloqueadas
-                </h3>
-                <p className="text-white/60 text-xs max-w-sm mb-6 leading-relaxed">
-                  Para garantizar la seguridad de la comunidad y un entorno libre de cuentas falsas, debes verificar tu identidad con la cámara antes de enviar mensajes o unirte a salas.
-                </p>
-                {onIrAVerificacion && (
-                  <button
-                    onClick={onIrAVerificacion}
-                    className="bg-primary hover:bg-primary/90 text-white font-medium text-sm px-5 py-2.5 rounded-xl transition shadow-lg shadow-primary/20"
-                  >
-                    Verificar mi edad ahora
-                  </button>
-                )}
-              </div>
-            )}
           </>
         )}
       </div>
 
-      {/* Modal Ver Miembros del Grupo */}
+      {/* Modal Miembros */}
       {modalMiembros && salaActiva && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-card border border-white/10 rounded-2xl w-full max-w-sm p-4 shadow-2xl">
@@ -490,7 +516,10 @@ export default function Chat({
                         (m.username?.[0] || 'U').toUpperCase()
                       )}
                     </div>
-                    <span className="text-white text-xs font-medium">{m.username} {m.id === usuario.id ? '(Tú)' : ''}</span>
+                    <span className="text-white text-xs font-medium flex items-center gap-1.5">
+                      {m.username} {m.id === usuario.id ? '(Tú)' : ''}
+                      <BadgeVerificado verificado={m.verificado} edadEstimada={m.edad_estimada} />
+                    </span>
                   </div>
                   {m.id !== usuario.id && (
                     <button
@@ -510,7 +539,7 @@ export default function Chat({
         </div>
       )}
 
-      {/* Modal Ver Perfil de usuario */}
+      {/* Modal Perfil */}
       {modalPerfilId && (
         <ModalPerfilUsuario usuarioId={modalPerfilId} token={token} onClose={() => setModalPerfilId(null)} />
       )}

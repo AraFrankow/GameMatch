@@ -12,6 +12,7 @@ export default function VerificacionCamara({ token, onSuccess }) {
   const [procesandoIA, setProcesandoIA] = useState(false);
   const [error, setError] = useState('');
   const [camaraActiva, setCamaraActiva] = useState(false);
+  const [edadEstimada, setEdadEstimada] = useState(null);
 
   useEffect(() => {
     async function obtenerCamaras() {
@@ -31,6 +32,7 @@ export default function VerificacionCamara({ token, onSuccess }) {
 
   const iniciarCamara = async (deviceId = dispositivoSeleccionado) => {
     setError('');
+    setEdadEstimada(null);
     setCargandoCamara(true);
 
     if (stream) {
@@ -48,9 +50,9 @@ export default function VerificacionCamara({ token, onSuccess }) {
     } catch (err) {
       console.error(err);
       if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
-        setError('La cámara está en uso por otra app. Cerrala e intentá de nuevo.');
+        setError('La cámara está en uso por otra aplicación. Cerrala e intentá de nuevo.');
       } else if (err.name === 'NotAllowedError') {
-        setError('Permiso de cámara denegado. Permitila desde el candado de la URL.');
+        setError('Permiso de cámara denegado. Permitilo desde el navegador.');
       } else {
         setError('No se pudo acceder a la cámara: ' + err.message);
       }
@@ -73,21 +75,21 @@ export default function VerificacionCamara({ token, onSuccess }) {
     };
   }, [stream]);
 
-  // Capturar y enviar imagen
   const capturarYVerificar = async () => {
     if (!videoRef.current) return;
 
     setProcesandoIA(true);
     setError('');
+    setEdadEstimada(null);
 
     try {
       const canvas = document.createElement('canvas');
-      canvas.width = 480;
-      canvas.height = 360;
+      canvas.width = 640;
+      canvas.height = 480;
       const ctx = canvas.getContext('2d');
       ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-      
-      const imagenBase64 = canvas.toDataURL('image/jpeg', 0.6);
+
+      const imagenBase64 = canvas.toDataURL('image/jpeg', 0.85);
 
       const res = await fetch(URL_API_BACKEND, {
         method: 'POST',
@@ -98,19 +100,14 @@ export default function VerificacionCamara({ token, onSuccess }) {
         body: JSON.stringify({ imagen: imagenBase64 })
       });
 
-      const text = await res.text();
-      let data = {};
-
-      try {
-        data = JSON.parse(text);
-      } catch (_) {
-        if (!res.ok) {
-          throw new Error(`El servidor devolvió un error ${res.status} (no JSON). Verificá que la ruta "${URL_API_BACKEND}" exista en tu backend.`);
-        }
-      }
+      const data = await res.json();
 
       if (!res.ok || data.exito === false) {
-        throw new Error(data.message || `Error ${res.status} al verificar la imagen.`);
+        throw new Error(data.message || data.error || 'Error al verificar la foto.');
+      }
+
+      if (data.edad_estimada !== undefined) {
+        setEdadEstimada(data.edad_estimada);
       }
 
       if (stream) {
@@ -119,11 +116,7 @@ export default function VerificacionCamara({ token, onSuccess }) {
 
       if (onSuccess) onSuccess(data);
     } catch (err) {
-      if (err.name === 'TypeError' && err.message === 'Failed to fetch') {
-        setError(`No se pudo conectar con el servidor en ${URL_API_BACKEND}. Verificá que el backend esté encendido.`);
-      } else {
-        setError(err.message || 'No se pudo verificar la imagen.');
-      }
+      setError(err.message || 'No se pudo completar la verificación.');
     } finally {
       setProcesandoIA(false);
     }
@@ -133,7 +126,7 @@ export default function VerificacionCamara({ token, onSuccess }) {
     <div className="space-y-4 text-center p-2">
       {dispositivos.length > 1 && (
         <div className="max-w-xs mx-auto mb-2">
-          <label className="block text-[11px] text-white/50 mb-1">Cámara detectada:</label>
+          <label className="block text-[11px] text-white/50 mb-1">Cámara seleccionada:</label>
           <select
             value={dispositivoSeleccionado}
             onChange={(e) => {
@@ -182,7 +175,7 @@ export default function VerificacionCamara({ token, onSuccess }) {
             {procesandoIA && (
               <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center p-4 z-10">
                 <div className="w-8 h-8 border-3 border-primary border-t-transparent rounded-full animate-spin mb-3" />
-                <p className="text-white text-xs font-semibold mb-2">Analizando rostro con IA...</p>
+                <p className="text-white text-xs font-semibold mb-2">Analizando edad con Amazon AWS...</p>
                 <div className="w-48 h-1.5 bg-white/20 rounded-full overflow-hidden">
                   <div className="h-full bg-primary rounded-full animate-pulse w-full" />
                 </div>
@@ -196,9 +189,15 @@ export default function VerificacionCamara({ token, onSuccess }) {
               disabled={procesandoIA}
               className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-5 py-2 rounded-xl transition shadow-md disabled:opacity-50 flex items-center gap-2"
             >
-              {procesandoIA ? 'Procesando...' : '📸 Tomar Foto y Verificar'}
+              {procesandoIA ? 'Verificando...' : 'Tomar Foto y Verificar'}
             </button>
           </div>
+        </div>
+      )}
+
+      {edadEstimada !== null && (
+        <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs p-3 rounded-xl max-w-sm mx-auto text-center font-medium">
+          Verificación exitosa. Edad estimada: <span className="font-bold text-sm text-white">{edadEstimada} años</span>
         </div>
       )}
 

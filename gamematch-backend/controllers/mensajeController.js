@@ -13,7 +13,11 @@ const obtenerHistorial = async (req, res) => {
 
     const mensajes = await Mensaje.findAll({
       where: { sala_id: sid, bloqueado: false },
-      include: [{ model: Usuario, as: 'emisor', attributes: ['id', 'username', 'foto_perfil'] }],
+      include: [{ 
+        model: Usuario, 
+        as: 'emisor', 
+        attributes: ['id', 'username', 'foto_perfil', 'verificado'] 
+      }],
       order: [['createdAt', 'ASC']],
     });
 
