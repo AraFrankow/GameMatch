@@ -26,13 +26,21 @@ const obtenerPerfilPorId = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const usuario = await Usuario.findByPk(id, {
-      attributes: ['id', 'username', 'foto_perfil', 'biografia', 'rango_edad', 'verificado', 'edad_estimada']
+    const usuarioRaw = await Usuario.findByPk(id, {
+      attributes: { exclude: ['password_hash'] }
     });
 
-    if (!usuario) {
+    if (!usuarioRaw) {
       return res.status(404).json({ exito: false, error: 'Usuario no encontrado' });
     }
+
+    const u = usuarioRaw.toJSON();
+
+    const usuario = {
+      ...u,
+      es_premium: Boolean(u.es_premium || u.esPremium || Number(u.es_premium) === 1),
+      verificado: Boolean(u.verificado || u.estaVerificado)
+    };
 
     const riot = await IntegracionRiot?.findOne({ where: { usuario_id: id } });
     const steam = await IntegracionSteam?.findOne({ where: { usuario_id: id } });
@@ -86,7 +94,7 @@ const verificarCamara = async (req, res) => {
     const ageMin = ageRange.Low;
     const ageMax = ageRange.High;
 
-    // 4. Evaluación de Reglas de Tesis
+    // 4. Evaluación de Reglas
     const rangoEdadDeclarado = req.usuario?.rango_edad;
     const esMayorDeclarado = rangoEdadDeclarado && rangoEdadDeclarado !== 'menor_18';
     const esMayorIA = edadEstimada >= 18;

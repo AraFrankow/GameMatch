@@ -19,6 +19,7 @@ const partidaRoutes = require('./routes/partidaRoutes');
 const salaRoutes = require('./routes/salaRoutes');
 const integracionRoutes = require('./routes/integracionRoutes');
 const { registrarChatSocket } = require('./sockets/chatSocket');
+const stripeRoutes = require('./routes/stripeRoutes');
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -43,6 +44,7 @@ app.use('/api/partidas', partidaRoutes);
 app.use('/api/salas', salaRoutes);
 app.use('/api/integraciones', integracionRoutes);
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/api/stripe', stripeRoutes);
 
 registrarChatSocket(io);
 

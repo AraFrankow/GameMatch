@@ -15,9 +15,11 @@ const usuarioPublico = (u) => ({
   usa_microfono: u.usa_microfono,
   modo_juego: u.modo_juego,
   estado: u.estado,
-  es_premium: u.es_premium,
+  es_premium: Boolean(u.es_premium),
+  verificado: Boolean(u.verificado),
+  edad_estimada: u.edad_estimada || null,
   rol: u.rol,
-  biografia: u.biografia
+  biografia: u.biografia,
 });
 
 const registro = async (req, res) => {
@@ -27,7 +29,7 @@ const registro = async (req, res) => {
       return res.status(400).json({ error: 'username, email, password y rango_edad son obligatorios' });
     }
     if (password.length < 8) return res.status(400).json({ error: 'La contraseña debe tener al menos 8 caracteres' });
-    
+
     if (await Usuario.findOne({ where: { email } })) return res.status(409).json({ error: 'Ya existe una cuenta con ese email' });
     if (await Usuario.findOne({ where: { username } })) return res.status(409).json({ error: 'Ese nombre de usuario ya está en uso' });
 
@@ -87,7 +89,6 @@ const googleAuth = async (req, res) => {
       authGoogle = await AuthGoogle.create({ usuario_id: usuario.id, google_id, email_google: email });
     }
 
-    // Suspensión de cuenta
     if (usuario.suspendido) return res.status(403).json({ error: 'Tu cuenta fue suspendida' });
 
     const token = generarToken({ id: usuario.id, rol: usuario.rol });
@@ -106,18 +107,15 @@ const actualizarPerfil = async (req, res) => {
     const usuarioActual = await Usuario.findByPk(usuarioId);
     if (!usuarioActual) return res.status(404).json({ error: 'Usuario no encontrado' });
 
-    // Regla de edad
     if (usuarioActual.rango_edad !== 'menor_18' && rango_edad === 'menor_18') {
       return res.status(400).json({ error: 'No se permite cambiar el rango de edad a menor de 18 años.' });
     }
 
-    // Ver si el username esta siendo usado
     if (username && username !== usuarioActual.username) {
       const existeUsername = await Usuario.findOne({ where: { username } });
       if (existeUsername) return res.status(409).json({ error: 'El nombre de usuario ya está en uso' });
     }
 
-    // Que no esten vacios lo valores
     const cambios = {};
     if (username !== undefined) cambios.username = username;
     if (foto_perfil !== undefined) cambios.foto_perfil = foto_perfil;
@@ -135,7 +133,6 @@ const actualizarPerfil = async (req, res) => {
 
 const me = async (req, res) => {
   try {
-    // Carga el usuario junto a sus integraciones vinculadas
     const usuario = await Usuario.findByPk(req.usuario.id, {
       include: ['steam', 'riot']
     });

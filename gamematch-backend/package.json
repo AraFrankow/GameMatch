@@ -21,7 +21,8 @@
     "multer": "^2.4.0",
     "mysql2": "^3.24.5",
     "sequelize": "^6.37.8",
-    "socket.io": "^4.8.3"
+    "socket.io": "^4.8.3",
+    "stripe": "^23.0.0"
   },
   "devDependencies": {
     "react-webcam": "^7.2.0",

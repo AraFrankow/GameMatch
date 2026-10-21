@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { authApi } from '../api';
-import VerificacionCamara from './VerificacionCamara'; 
+import VerificacionCamara from './VerificacionCamara';
+import BotonPremium from './BotonPremium';
 
 const RANGOS_EDAD = [
   { value: 'menor_18', label: 'Menor de 18' },
@@ -41,16 +42,17 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
   });
 
   const cargarPerfil = () => {
-    authApi.obtenerMiPerfil(token)
-      .then((data) => {        
+    authApi
+      .obtenerMiPerfil(token)
+      .then((data) => {
         const p = data.perfil || data.usuario || data;
         setPerfilData(p);
-        
-        const juegosHallados = 
-          data.juegos || 
-          p.juegos || 
-          p.usuario_juegos || 
-          p.steam?.juegos || 
+
+        const juegosHallados =
+          data.juegos ||
+          p.juegos ||
+          p.usuario_juegos ||
+          p.steam?.juegos ||
           [];
 
         setDatosSteam(p.steam || null);
@@ -104,7 +106,7 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
     try {
       const res = await authApi.actualizarMiPerfil(token, form);
       const perfilActualizado = res.perfil || res;
-      
+
       setExito('¡Perfil actualizado con éxito!');
       setEditando(false);
 
@@ -144,10 +146,10 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
       setDatosSteam(res.integracion);
       setMostrarSteamInput(false);
       setSteamIdInput('');
-      
+
       const imp = res.importacion?.importados || 0;
       setExito(`¡Cuenta de Steam vinculada! Se importaron ${imp} juegos al catálogo.`);
-      
+
       cargarPerfil();
     } catch (err) {
       setErrorIntegracion(err.message || 'Error al vincular cuenta de Steam');
@@ -174,12 +176,13 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
 
   const rangoTexto = RANGOS_EDAD.find((r) => r.value === form.rango_edad)?.label || form.rango_edad;
   const esMayorDeEdad = form.rango_edad && form.rango_edad !== 'menor_18';
-  
+
   const estaVerificado = perfilData?.verificado || usuario?.verificado;
+  const esPremium = perfilData?.es_premium || usuario?.es_premium;
   const edadMostrar = edadVerificada || perfilData?.edad_estimada || usuario?.edad_estimada;
 
   return (
-    <div className="max-w-2xl mx-auto p-4 sm:p-6">
+    <div className="w-full max-w-4xl mx-auto p-4 sm:p-6 space-y-6">
       <button
         onClick={onVolver}
         className="text-white/60 hover:text-white text-xs mb-4 flex items-center gap-1 transition"
@@ -187,10 +190,15 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
         ← Volver
       </button>
 
-      <div className="bg-card border border-white/10 rounded-2xl p-6 shadow-xl">
-        <div className="flex flex-col sm:flex-row items-center gap-5 border-b border-white/10 pb-6 mb-6">
+      <div className="bg-card border border-white/10 rounded-2xl p-6 shadow-xl space-y-6">
+        {/* CABECERA DEL PERFIL */}
+        <div className="flex flex-col sm:flex-row items-center gap-5 border-b border-white/10 pb-6">
           <div className="relative group">
-            <div className="w-24 h-24 rounded-full bg-surface border-2 border-primary/50 overflow-hidden flex items-center justify-center text-3xl font-bold text-white shadow-lg">
+            <div
+              className={`w-24 h-24 rounded-full bg-surface overflow-hidden flex items-center justify-center text-3xl font-bold text-white shadow-lg border-2 ${
+                esPremium ? 'border-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.3)]' : 'border-primary/50'
+              }`}
+            >
               {form.foto_perfil ? (
                 <img src={form.foto_perfil} alt={form.username} className="w-full h-full object-cover" />
               ) : (
@@ -200,14 +208,30 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
           </div>
 
           <div className="text-center sm:text-left flex-1">
-            <h2 className="text-2xl font-bold text-white flex items-center justify-center sm:justify-start gap-2">
-              {form.username}
-              {estaVerificado && (
-                <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-semibold px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-sm" title="Edad verificada por Amazon AWS Rekognition">
+            <h2 className="text-2xl font-bold text-white flex items-center justify-center sm:justify-start gap-2 flex-wrap">
+              <span>{form.username}</span>
+
+              {/* Insignia Verificado */}
+              {Boolean(estaVerificado) && (
+                <span
+                  className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-semibold px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-sm"
+                  title="Edad verificada por Amazon AWS Rekognition"
+                >
                   ✓ Verificado {edadMostrar ? `(${edadMostrar} años)` : ''}
                 </span>
               )}
+
+              {/* Insignia Premium */}
+              {Boolean(esPremium) && (
+                <span
+                  className="bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-semibold px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-sm"
+                  title="Usuario Premium"
+                >
+                  ⭐ Suscripto
+                </span>
+              )}
             </h2>
+
             <p className="text-white/50 text-xs mt-1">{usuario?.email}</p>
             <span className="inline-block mt-2 bg-primary/20 text-primary border border-primary/30 text-[11px] font-semibold px-2.5 py-0.5 rounded-full">
               {rangoTexto}
@@ -216,16 +240,118 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
 
           {!editando && (
             <button
-              onClick={() => { setEditando(true); setExito(''); setError(''); }}
-              className="bg-primary hover:bg-primary/90 text-white text-xs font-semibold px-4 py-2 rounded-xl transition shadow-md"
+              onClick={() => {
+                setEditando(true);
+                setExito('');
+                setError('');
+              }}
+              className="bg-primary hover:bg-primary/90 text-white text-xs font-semibold px-4 py-2 rounded-xl transition shadow-md shrink-0"
             >
               Editar perfil
             </button>
           )}
         </div>
 
-        {error && <p className="bg-repRojo/10 text-repRojo text-xs p-3 rounded-xl mb-4">{error}</p>}
-        {exito && <p className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs p-3 rounded-xl mb-4 font-medium">{exito}</p>}
+        {/* ESTADO DE LA CUENTA (PREMIUM / GRATUITO) */}
+        <div className="bg-surface/50 border border-white/5 rounded-2xl p-4 shadow-lg">
+          <h3 className="text-xs font-semibold text-white/50 uppercase tracking-wider mb-3">
+            Estado de la cuenta
+          </h3>
+
+          {esPremium ? (
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-5 space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                {/* Lado izquierdo: Ícono + Título + Badge + Descripción */}
+                <div className="flex items-start gap-3.5">
+                  <span className="text-3xl shrink-0 mt-0.5">⭐</span>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <p className="text-amber-300 font-bold text-base whitespace-nowrap">
+                        GameMatch Premium Activo
+                      </p>
+                      
+                      <span
+                        className={`text-[11px] border px-2.5 py-0.5 rounded-full font-semibold whitespace-nowrap ${
+                          usuario?.cancel_at_period_end
+                            ? 'bg-red-500/20 text-red-300 border-red-500/40'
+                            : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                        }`}
+                      >
+                        {usuario?.cancel_at_period_end ? 'Cancelado (Período Pagado)' : 'Suscripto'}
+                      </span>
+                    </div>
+
+                    <p className="text-white/70 text-xs leading-relaxed max-w-xl">
+                      {usuario?.cancel_at_period_end
+                        ? 'Tu suscripción no se renovará. Conservás todos los beneficios hasta finalizar el ciclo.'
+                        : 'Plan Mensual · Renovación automática cada 30 días'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Lado derecho: Botón de cancelación o Badge de vencimiento */}
+                <div className="shrink-0 self-start md:self-center w-full md:w-auto">
+                  {!usuario?.cancel_at_period_end ? (
+                    <button
+                      onClick={async () => {
+                        if (window.confirm('¿Seguro que querés desactivar la renovación automática de tu suscripción?')) {
+                          try {
+                            const res = await authApi.cancelarSuscripcion(token);
+                            if (res.exito) {
+                              alert(res.mensaje || 'Renovación automática desactivada.');
+                              if (onActualizarUsuario && res.usuario) {
+                                onActualizarUsuario(res.usuario);
+                              }
+                              cargarPerfil();
+                            }
+                          } catch (err) {
+                            alert(err.message || 'Error al cancelar la suscripción.');
+                          }
+                        }
+                      }}
+                      className="w-full md:w-auto text-xs bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 px-4 py-2 rounded-xl transition font-medium whitespace-nowrap text-center"
+                    >
+                      Cancelar renovación
+                    </button>
+                  ) : (
+                    <div className="text-xs text-red-300 bg-red-500/15 border border-red-500/30 px-4 py-2 rounded-xl font-medium whitespace-nowrap text-center">
+                      Vence al finalizar los 30 días
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Beneficios */}
+              <div className="pt-3.5 border-t border-amber-500/20 flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-8 text-xs text-white/80">
+                <div className="flex items-center gap-2">
+                  <span className="text-amber-400 font-bold">✓</span> Filtros avanzados en búsquedas
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-amber-400 font-bold">✓</span> Borde dorado y badge exclusivo
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-surface border border-white/5 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div>
+                <p className="text-white font-medium text-sm">Plan Gratuito</p>
+                <p className="text-white/50 text-xs mt-0.5">
+                  Aumentá tus oportunidades de encontrar squad filtrando por reputación y rol.
+                </p>
+              </div>
+              <div className="shrink-0 w-full sm:w-auto">
+                <BotonPremium token={token} esPremium={false} />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {error && <p className="bg-repRojo/10 text-repRojo text-xs p-3 rounded-xl">{error}</p>}
+        {exito && (
+          <p className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs p-3 rounded-xl font-medium">
+            {exito}
+          </p>
+        )}
 
         {!editando ? (
           <div className="space-y-6">
@@ -238,7 +364,7 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
 
             <div>
               <h3 className="text-xs uppercase text-white/40 font-semibold mb-2">Verificación de Identidad</h3>
-              
+
               {estaVerificado ? (
                 <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-xl flex items-center gap-3">
                   <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-sm">
@@ -253,7 +379,9 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
                         </span>
                       )}
                     </p>
-                    <p className="text-[11px] text-white/50">Identidad confirmada mediante la API de visión artificial de Amazon AWS Rekognition.</p>
+                    <p className="text-[11px] text-white/50">
+                      Identidad confirmada mediante la API de visión artificial de Amazon AWS Rekognition.
+                    </p>
                   </div>
                 </div>
               ) : (
@@ -261,7 +389,9 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-xs font-medium text-white">Verificar Edad con Webcam</p>
-                      <p className="text-[11px] text-white/40">Tomate una selfie rápida para validar tu edad y obtener tu insignia de verificación.</p>
+                      <p className="text-[11px] text-white/40">
+                        Tomate una selfie rápida para validar tu edad y obtener tu insignia de verificación.
+                      </p>
                     </div>
                     <button
                       onClick={() => setMostrarCamara(!mostrarCamara)}
@@ -273,32 +403,36 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
 
                   {mostrarCamara && (
                     <div className="pt-3 border-t border-white/5">
-                      <VerificacionCamara 
-                        token={token} 
+                      <VerificacionCamara
+                        token={token}
                         onSuccess={(data) => {
                           const edadCalculada = data?.edad_estimada || data?.edadEstimada;
                           const nuevoRango = data?.rango_edad || data?.rangoEdad;
-                          
+
                           if (edadCalculada) setEdadVerificada(edadCalculada);
                           if (nuevoRango) {
                             setForm((prev) => ({ ...prev, rango_edad: nuevoRango }));
                           }
 
-                          const mensajeTexto = data?.message || data?.mensaje || 
-                            `Rostro verificado correctamente con AWS${edadCalculada ? ` (${edadCalculada} años)` : ''}.`;
-                          
+                          const mensajeTexto =
+                            data?.message ||
+                            data?.mensaje ||
+                            `Rostro verificado correctamente con AWS${
+                              edadCalculada ? ` (${edadCalculada} años)` : ''
+                            }.`;
+
                           setExito(mensajeTexto);
                           setMostrarCamara(false);
-                          
+
                           if (onActualizarUsuario) {
                             onActualizarUsuario({
                               verificado: true,
                               edad_estimada: edadCalculada,
-                              rango_edad: nuevoRango || usuario?.rango_edad
+                              rango_edad: nuevoRango || usuario?.rango_edad,
                             });
                           }
                           cargarPerfil();
-                        }} 
+                        }}
                       />
                     </div>
                   )}
@@ -308,12 +442,15 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
 
             <div>
               <h3 className="text-xs uppercase text-white/40 font-semibold mb-2">Cuentas Vinculadas</h3>
-              
+
               {errorIntegracion && (
-                <p className="bg-repRojo/10 text-repRojo text-xs p-2.5 rounded-xl mb-3">{errorIntegracion}</p>
+                <p className="bg-repRojo/10 text-repRojo text-xs p-2.5 rounded-xl mb-3">
+                  {errorIntegracion}
+                </p>
               )}
 
               <div className="space-y-3">
+                {/* Riot Games */}
                 <div className="bg-surface/50 border border-white/5 p-4 rounded-xl flex flex-col gap-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -323,7 +460,9 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
                       <div>
                         <p className="text-xs font-medium text-white">Riot Games</p>
                         <p className="text-[11px] text-white/40">
-                          {datosRiot ? `${datosRiot.riot_username} (${datosRiot.region?.toUpperCase()})` : 'No vinculada'}
+                          {datosRiot
+                            ? `${datosRiot.riot_username} (${datosRiot.region?.toUpperCase()})`
+                            : 'No vinculada'}
                         </p>
                       </div>
                     </div>
@@ -397,6 +536,7 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
                   )}
                 </div>
 
+                {/* Steam */}
                 <div className="bg-surface/50 border border-white/5 p-4 rounded-xl flex flex-col gap-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -457,8 +597,10 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
                       {juegosLista && juegosLista.length > 0 ? (
                         <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
                           {juegosLista.map((juego, index) => {
-                            const horas = juego.horas_steam ?? (juego.playtime_forever ? Math.round(juego.playtime_forever / 60) : 0);
-                            
+                            const horas =
+                              juego.horas_steam ??
+                              (juego.playtime_forever ? Math.round(juego.playtime_forever / 60) : 0);
+
                             return (
                               <div
                                 key={juego.id || juego.appid || index}
@@ -469,7 +611,9 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
                                     src={juego.imagen_url}
                                     alt={juego.nombre || juego.name}
                                     className="w-5 h-5 rounded object-cover bg-white/5"
-                                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                    onError={(e) => {
+                                      e.currentTarget.style.display = 'none';
+                                    }}
                                   />
                                 ) : (
                                   <span className="text-xs">🎮</span>
@@ -488,7 +632,8 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
                         </div>
                       ) : (
                         <p className="text-[11px] text-amber-400/90 bg-amber-500/10 p-2 rounded-lg border border-amber-500/20">
-                          No se detectaron juegos. Asegurate de que los <b>"Detalles de los juegos"</b> estén en <b>Público</b> en la privacidad de tu perfil de Steam.
+                          No se detectaron juegos. Asegurate de que los <b>"Detalles de los juegos"</b> estén
+                          en <b>Público</b> en la privacidad de tu perfil de Steam.
                         </p>
                       )}
                     </div>
@@ -518,7 +663,9 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
                   type="button"
                   onClick={() => setTipoFoto('url')}
                   className={`text-xs px-3 py-1 rounded-lg transition ${
-                    tipoFoto === 'url' ? 'bg-primary text-white font-semibold' : 'bg-surface text-white/50 hover:text-white'
+                    tipoFoto === 'url'
+                      ? 'bg-primary text-white font-semibold'
+                      : 'bg-surface text-white/50 hover:text-white'
                   }`}
                 >
                   Pegar URL
@@ -527,7 +674,9 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
                   type="button"
                   onClick={() => setTipoFoto('archivo')}
                   className={`text-xs px-3 py-1 rounded-lg transition ${
-                    tipoFoto === 'archivo' ? 'bg-primary text-white font-semibold' : 'bg-surface text-white/50 hover:text-white'
+                    tipoFoto === 'archivo'
+                      ? 'bg-primary text-white font-semibold'
+                      : 'bg-surface text-white/50 hover:text-white'
                   }`}
                 >
                   Subir foto desde el PC

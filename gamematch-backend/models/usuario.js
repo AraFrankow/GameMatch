@@ -30,7 +30,19 @@ const Usuario = sequelize.define('Usuario', {
   fecha_nacimiento: {
     type: DataTypes.DATEONLY,
     allowNull: true
-  }
+  },
+  stripe_subscription_id: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  stripe_customer_id: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  cancel_at_period_end: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+  },
 }, {
   tableName: 'usuarios',
   timestamps: true,

@@ -29,7 +29,6 @@ export const authApi = {
   companeros: (token) => fetch(`${API_URL}/api/companeros`, { headers: authHeaders(token) }).then(manejarRespuesta),
   partidas: (token, usuarioId) => fetch(`${API_URL}/api/partidas/${usuarioId}`, { headers: authHeaders(token) }).then(manejarRespuesta),
   perfilPublico: (token, id) => fetch(`${API_URL}/api/usuarios/${id}`, { headers: authHeaders(token) }).then(manejarRespuesta),
-
   // ---- Chat / Salas ----
   crearSala: (token, body) => fetch(`${API_URL}/api/salas`, { method: 'POST', headers: jsonHeaders(token), body: JSON.stringify(body) }).then(manejarRespuesta),
   misSalas: (token) => fetch(`${API_URL}/api/salas`, { headers: authHeaders(token) }).then(manejarRespuesta),
@@ -89,12 +88,11 @@ export const authApi = {
       return data;
     },
 
-    obtenerPerfilUsuario: async (token, usuarioId) => {
-    const res = await fetch(`${API_URL}/usuarios/${usuarioId}`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.message || data.error || 'Error al obtener el perfil');
-    return data;
-  },
+    obtenerPerfilUsuario: (token, id) => fetch(`${API_URL}/api/usuarios/${id}`, { headers: authHeaders(token) }).then(manejarRespuesta),
+
+    cancelarSuscripcion: (token) =>
+      fetch(`${API_URL}/api/stripe/cancelar-suscripcion`, {
+        method: 'POST',
+        headers: authHeaders(token),
+      }).then(manejarRespuesta),
 };

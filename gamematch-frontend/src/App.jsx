@@ -56,6 +56,7 @@ export default function App() {
   
   const [mensajesNoLeidos, setMensajesNoLeidos] = useState({});
 
+  const pagoProcesadoRef = useRef(false);
   const vistaRef = useRef(vista);
   const salaActivaIdRef = useRef(salaActivaId);
   const sesionRef = useRef(sesion);
@@ -91,13 +92,56 @@ export default function App() {
     socket.connect();
   };
 
+  // --- CAPTURAR RETORNO DE PAGO DE STRIPE ---
+  useEffect(() => {
+    if (!sesion?.token) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const pagoStatus = params.get('pago');
+    const sessionId = params.get('session_id');
+
+    if (pagoStatus === 'exito' && sessionId && !pagoProcesadoRef.current) {
+      pagoProcesadoRef.current = true;
+
+      window.history.replaceState({}, document.title, window.location.pathname);
+
+      const URL_BACK = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+      fetch(`${URL_BACK}/api/stripe/confirmar-pago`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${sesion.token}`,
+        },
+        body: JSON.stringify({ session_id: sessionId }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.exito) {
+            alert('🎉 ¡Felicitaciones! Tu pago fue procesado correctamente. Ahora sos usuario GameMatch Premium.');
+            handleActualizarUsuario({ es_premium: 1 });
+          } else {
+            alert(data.error || 'No se pudo verificar la transacción de pago.');
+          }
+        })
+        .catch((err) => console.error('Error al confirmar pago:', err));
+    } else if (pagoStatus === 'cancelado') {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, [sesion?.token]);
+
   useEffect(() => {
     if (sesion?.token) {
       // Sincronizar datos del usuario directo desde MySQL
       authApi.obtenerMiPerfil(sesion.token)
         .then((data) => {
           const p = data.perfil || data.usuario || data;
-          if (p && (p.verificado !== sesion.usuario?.verificado || p.rango_edad !== sesion.usuario?.rango_edad)) {
+          if (
+            p && (
+              p.verificado !== sesion.usuario?.verificado || 
+              p.rango_edad !== sesion.usuario?.rango_edad ||
+              p.es_premium !== sesion.usuario?.es_premium
+            )
+          ) {
             setSesion((prev) => {
               if (!prev) return null;
               const actualizada = { ...prev, usuario: { ...prev.usuario, ...p } };
@@ -350,6 +394,7 @@ export default function App() {
                 )}
               </div>
               <span className="text-xs font-medium hidden sm:inline">{sesion.usuario?.username}</span>
+              {sesion.usuario?.es_premium && <span className="text-amber-400 text-xs" title="GameMatch Premium">⭐</span>}
             </button>
 
             <Campanita notificaciones={notificaciones} onAceptar={aceptarInvitacion} onRechazar={rechazarInvitacion} />
