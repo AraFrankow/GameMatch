@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { buscar } = require('../controllers/busquedaController');
+const { buscarCompaneros } = require('../controllers/busquedaController');
 const { verificarAuth } = require('../middleware/auth');
-router.get('/', verificarAuth, buscar);
+router.get('/', verificarAuth, buscarCompaneros);
 module.exports = router;

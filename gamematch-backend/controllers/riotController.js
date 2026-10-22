@@ -1,4 +1,6 @@
 const { IntegracionRiot } = require('../models');
+const axios = require('axios');
+const { calcularSinergiaDuo } = require('../utils/sinergia');
 
 const CLUSTER_POR_REGION = {
   la1: 'americas', lan: 'americas',
@@ -28,102 +30,88 @@ const PLATAFORMA_POR_REGION = {
   oc1: 'oc1',
 };
 
+const MAPEO_ROLES = {
+  TOP: 'TOP',
+  JUNGLE: 'JUNGLE',
+  MIDDLE: 'MID',
+  BOTTOM: 'ADC',
+  UTILITY: 'SUPPORT',
+};
+
+async function obtenerTopCampeones(puuid, plataforma, apiKey) {
+  try {
+    const url = `https://${plataforma}.api.riotgames.com/lol/champion-mastery/v4/champion-masteries/by-puuid/${puuid}/top?count=3`;
+    const response = await axios.get(url, { headers: { 'X-Riot-Token': apiKey } });
+
+    return response.data.map((c) => ({
+      championId: c.championId,
+      championLevel: c.championLevel,
+      championPoints: c.championPoints,
+    }));
+  } catch (error) {
+    console.error('Error al obtener maestrías de Riot:', error.message);
+    return [];
+  }
+}
+
 const vincularRiot = async (req, res) => {
   try {
-    const { game_name, tag_line, region } = req.body;
+    const { game_name, tag_line, region, posicion_principal } = req.body;
     const usuario_id = req.usuario.id;
     const apiKey = process.env.RIOT_API_KEY;
 
     if (!game_name || !tag_line || !region) {
       return res.status(400).json({ error: 'game_name, tag_line y region son obligatorios' });
     }
-    if (!apiKey) {
-      return res.status(503).json({ error: 'Falta RIOT_API_KEY en el .env' });
-    }
 
     const regionClean = region.trim().toLowerCase();
     const cluster = CLUSTER_POR_REGION[regionClean];
     const plataforma = PLATAFORMA_POR_REGION[regionClean];
 
-    if (!cluster || !plataforma) {
-      return res.status(400).json({ error: `Región '${region}' inválida. Usá: las, lan, na, br, euw, kr, etc.` });
-    }
-
-    const yaVinculado = await IntegracionRiot.findOne({ where: { usuario_id } });
-    if (yaVinculado) {
-      return res.status(409).json({ error: 'Ya tenés una cuenta de Riot vinculada. Desvinculala primero.' });
-    }
-
     const urlAccount = `https://${cluster}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(game_name)}/${encodeURIComponent(tag_line)}`;
-    console.log(`[Riot Debug] 1. Consultando Account API: ${urlAccount}`);
-    
     const resAccount = await fetch(urlAccount, { headers: { 'X-Riot-Token': apiKey } });
 
-    if (resAccount.status === 404) return res.status(404).json({ error: 'No se encontró esa cuenta de Riot (revisá el nombre y el tag)' });
-    if (!resAccount.ok) return res.status(502).json({ error: `Riot Account API respondió con estado ${resAccount.status}` });
-
-    const account = await resAccount.json();
-    const { puuid } = account;
-    console.log(`[Riot Debug] PUUID obtenido: ${puuid}`);
+    if (!resAccount.ok) return res.status(404).json({ error: 'No se encontró la cuenta de Riot' });
+    const { puuid } = await resAccount.json();
 
     let nivel_invocador = null;
-    let icono_perfil_id = null;
     let rango_lol = 'UNRANKED';
     let lol_tier = 'UNRANKED';
     let lol_rank = null;
     let lol_lp = 0;
     let lol_wins = 0;
     let lol_losses = 0;
+    let top_champions = [];
 
-    try {
-      const urlSummoner = `https://${plataforma}.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/${puuid}`;
-      console.log(`[Riot Debug] 2. Consultando Summoner API: ${urlSummoner}`);
-      
-      const resSummoner = await fetch(urlSummoner, { headers: { 'X-Riot-Token': apiKey } });
+    const urlSummoner = `https://${plataforma}.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/${puuid}`;
+    const resSummoner = await fetch(urlSummoner, { headers: { 'X-Riot-Token': apiKey } });
 
-      if (resSummoner.ok) {
-        const summoner = await resSummoner.json();
-        nivel_invocador = summoner.summonerLevel;
-        icono_perfil_id = summoner.profileIconId;
+    if (resSummoner.ok) {
+      const summoner = await resSummoner.json();
+      nivel_invocador = summoner.summonerLevel;
 
-        console.log(`[Riot Debug] Summoner nivel ${nivel_invocador} cargado OK.`);
+      const urlLeague = `https://${plataforma}.api.riotgames.com/lol/league/v4/entries/by-puuid/${puuid}`;
+      const resLeague = await fetch(urlLeague, { headers: { 'X-Riot-Token': apiKey } });
 
-        const urlLeague = `https://${plataforma}.api.riotgames.com/lol/league/v4/entries/by-puuid/${puuid}`;
-        console.log(`[Riot Debug] 3. Consultando League API por PUUID: ${urlLeague}`);
-
-        let resLeague = await fetch(urlLeague, { headers: { 'X-Riot-Token': apiKey } });
-
-        if (!resLeague.ok && summoner.id) {
-          const urlLeagueFallback = `https://${plataforma}.api.riotgames.com/lol/league/v4/entries/by-summoner/${summoner.id}`;
-          console.log(`[Riot Debug] Reintentando League API por Summoner ID: ${urlLeagueFallback}`);
-          resLeague = await fetch(urlLeagueFallback, { headers: { 'X-Riot-Token': apiKey } });
+      if (resLeague.ok) {
+        const entries = await resLeague.json();
+        const soloQ = entries.find((e) => e.queueType === 'RANKED_SOLO_5x5');
+        if (soloQ) {
+          lol_tier = soloQ.tier;
+          lol_rank = soloQ.rank;
+          lol_lp = soloQ.leaguePoints;
+          lol_wins = soloQ.wins;
+          lol_losses = soloQ.losses;
+          rango_lol = `${lol_tier} ${lol_rank}`;
         }
-
-        if (resLeague.ok) {
-          const entries = await resLeague.json();
-          console.log(`[Riot Debug] Entradas de Liga obtenidas:`, JSON.stringify(entries));
-
-          const soloQ = entries.find((e) => e.queueType === 'RANKED_SOLO_5x5');
-
-          if (soloQ) {
-            lol_tier = soloQ.tier;
-            lol_rank = soloQ.rank;
-            lol_lp = soloQ.leaguePoints;
-            lol_wins = soloQ.wins;
-            lol_losses = soloQ.losses;
-            rango_lol = `${lol_tier} ${lol_rank}`;
-            console.log(`[Riot Debug] Rango SoloQ asignado: ${rango_lol} (${lol_lp} LP)`);
-          } else {
-            console.log('[Riot Debug] La cuenta no tiene registros en SoloQ para este split.');
-          }
-        } else {
-          console.error(`[Riot Debug] League API falló con estado ${resLeague.status}`);
-        }
-      } else {
-        console.error(`[Riot Debug] Summoner API falló con estado ${resSummoner.status}`);
       }
-    } catch (err) {
-      console.error('[Riot Debug] Error al consultar datos de LoL:', err.message);
+
+      top_champions = await obtenerTopCampeones(puuid, plataforma, apiKey);
+    }
+
+    let rolFinal = posicion_principal || null;
+    if (!rolFinal) {
+      rolFinal = await obtenerRolMasJugado(puuid, cluster, apiKey);
     }
 
     const integracion = await IntegracionRiot.create({
@@ -132,26 +120,26 @@ const vincularRiot = async (req, res) => {
       riot_username: `${game_name}#${tag_line}`,
       region: regionClean,
       nivel_invocador,
-      icono_perfil_id,
       rango_lol,
       lol_tier,
       lol_rank,
       lol_lp,
       lol_wins,
       lol_losses,
-      rango_valorant: null,
+      lol_posicion_principal: rolFinal,
+      top_champions,
       ultima_sincronizacion: new Date(),
     });
 
     return res.status(201).json({
       exito: true,
       integracion,
-      mensaje: 'Cuenta de Riot vinculada y sincronizada con éxito.'
+      rolDetectado: Boolean(rolFinal),
+      mensaje: 'Cuenta de Riot vinculada correctamente.',
     });
-
   } catch (err) {
-    console.error('Error grave en vincularRiot:', err);
-    return res.status(500).json({ error: 'Error al vincular la cuenta de Riot' });
+    console.error('Error en vincularRiot:', err);
+    return res.status(500).json({ error: 'Error al vincular cuenta de Riot' });
   }
 };
 
@@ -166,4 +154,70 @@ const desvincularRiot = async (req, res) => {
   }
 };
 
-module.exports = { vincularRiot, desvincularRiot };
+const obtenerRolMasJugado = async (puuid, cluster, apiKey) => {
+  try {
+    const urlMatchIds = `https://${cluster}.api.riotgames.com/lol/match/v5/matches/by-puuid/${puuid}/ids?start=0&count=10`;
+    const resIds = await fetch(urlMatchIds, { headers: { 'X-Riot-Token': apiKey } });
+    if (!resIds.ok) return null;
+
+    const matchIds = await resIds.json();
+    if (!matchIds || matchIds.length === 0) return null;
+
+    const conteoRoles = {};
+
+    for (const matchId of matchIds.slice(0, 5)) {
+      const urlMatch = `https://${cluster}.api.riotgames.com/lol/match/v5/matches/${matchId}`;
+      const resMatch = await fetch(urlMatch, { headers: { 'X-Riot-Token': apiKey } });
+      if (!resMatch.ok) continue;
+
+      const matchData = await resMatch.json();
+      const jugador = matchData.info?.participants?.find((p) => p.puuid === puuid);
+
+      if (jugador && jugador.individualPosition) {
+        const pos = MAPEO_ROLES[jugador.individualPosition.toUpperCase()] || jugador.individualPosition;
+        if (pos && pos !== 'Invalid') {
+          conteoRoles[pos] = (conteoRoles[pos] || 0) + 1;
+        }
+      }
+    }
+
+    let rolDominante = null;
+    let maxConteo = 0;
+    for (const [rol, conteo] of Object.entries(conteoRoles)) {
+      if (conteo > maxConteo) {
+        maxConteo = conteo;
+        rolDominante = rol;
+      }
+    }
+
+    return rolDominante;
+  } catch (err) {
+    console.error('[Riot Debug] Error calculando rol desde historial:', err.message);
+    return null;
+  }
+};
+
+const actualizarRolRiot = async (req, res) => {
+  try {
+    const { posicion_principal } = req.body;
+    const usuario_id = req.usuario.id;
+
+    const riot = await IntegracionRiot.findOne({ where: { usuario_id } });
+    if (!riot) return res.status(404).json({ error: 'No tenés cuenta de Riot vinculada' });
+
+    riot.lol_posicion_principal = posicion_principal;
+    await riot.save();
+
+    return res.json({ exito: true, posicion: posicion_principal });
+  } catch (err) {
+    return res.status(500).json({ error: 'Error al actualizar rol' });
+  }
+};
+
+module.exports = {
+  vincularRiot,
+  desvincularRiot,
+  obtenerTopCampeones,
+  calcularSinergiaDuo,
+  actualizarRolRiot,
+};

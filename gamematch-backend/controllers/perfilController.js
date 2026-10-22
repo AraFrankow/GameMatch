@@ -1,6 +1,7 @@
 const { Usuario, UsuarioPlataforma, UsuarioJuego, Juego, IntegracionSteam, IntegracionRiot } = require('../models');
 const { existeBloqueoEntre } = require('./bloqueoController');
 const { calcularReputacionBulk } = require('../utils/reputacion');
+const { calcularSinergiaDuo } = require('../utils/sinergia');
 
 const PLATAFORMAS_VALIDAS = ['pc', 'consola', 'mobile'];
 const MODOS_JUEGO_VALIDOS = ['competitivo', 'casual', 'ambos'];
@@ -8,7 +9,6 @@ const ESTADOS_VALIDOS = ['disponible', 'ocupado', 'en_partida'];
 const RANGOS_EDAD_VALIDOS = ['menor_18', '18_25', '26_35', '36_mas'];
 
 const construirPerfilCompleto = async (usuarioId) => {
-  // Incluimos plataformas y juegos
   const includes = [
     { model: UsuarioPlataforma, as: 'plataformas', attributes: ['plataforma'] },
     {
@@ -19,7 +19,6 @@ const construirPerfilCompleto = async (usuarioId) => {
     },
   ];
 
-  // Integracion Steam y Riot
   if (IntegracionSteam) includes.push({ model: IntegracionSteam, as: 'steam' });
   if (IntegracionRiot) includes.push({ model: IntegracionRiot, as: 'riot' });
 
@@ -37,6 +36,7 @@ const construirPerfilCompleto = async (usuarioId) => {
   return {
     ...plano,
     reputacion: rep,
+    reputacion_porcentaje: rep.porcentaje,
     steam: plano.steam || null,
     riot: plano.riot || null,
     plataformas: (plano.plataformas || []).map((p) => p.plataforma),
@@ -68,9 +68,23 @@ const obtenerPerfilPorId = async (req, res) => {
     if (await existeBloqueoEntre(req.usuario.id, req.params.id)) {
       return res.status(403).json({ error: 'No podes ver este perfil' });
     }
+
     const perfil = await construirPerfilCompleto(req.params.id);
     if (!perfil) return res.status(404).json({ error: 'Usuario no encontrado' });
-    return res.json({ perfil });
+
+    // Cálculo dinámico de Sinergia Duo si es otro usuario
+    let sinergia_porcentaje = 50;
+    if (String(req.usuario.id) !== String(req.params.id)) {
+      const miPerfil = await construirPerfilCompleto(req.usuario.id);
+      sinergia_porcentaje = calcularSinergiaDuo(miPerfil, perfil);
+    }
+
+    return res.json({
+      perfil: {
+        ...perfil,
+        sinergia_porcentaje,
+      },
+    });
   } catch (err) {
     console.error('Error en obtenerPerfilPorId:', err);
     return res.status(500).json({ error: 'Error al obtener el perfil' });

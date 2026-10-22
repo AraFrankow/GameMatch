@@ -51,6 +51,7 @@ export const authApi = {
     }).then(manejarRespuesta),
 
   actualizarMiPerfil: (token, datos) => fetch(`${API_URL}/api/auth/perfil`, { method: 'PUT', headers: jsonHeaders(token), body: JSON.stringify(datos) }).then(manejarRespuesta),
+  actualizarPerfil: (token, datos) => fetch(`${API_URL}/api/auth/perfil`, { method: 'PUT', headers: jsonHeaders(token), body: JSON.stringify(datos) }).then(manejarRespuesta),
 
   // ---- Integraciones ----
   vincularSteam: (token, steam_id) => 
@@ -73,32 +74,47 @@ export const authApi = {
       headers: authHeaders(token) 
     }).then(manejarRespuesta),
 
-    verificarEdad: async (token, imagenBase64) => {
-      const res = await fetch('http://localhost:3000/api/usuarios/verificar-edad', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ imagen: imagenBase64 })
-      });
+  desvincularRiot: (token) => 
+    fetch(`${API_URL}/api/integraciones/riot`, { 
+      method: 'DELETE', 
+      headers: authHeaders(token) 
+    }).then(manejarRespuesta),
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Error al verificar la imagen');
-      return data;
-    },
+  desvincularSteam: (token) => 
+    fetch(`${API_URL}/api/integraciones/steam`, { 
+      method: 'DELETE', 
+      headers: authHeaders(token) 
+    }).then(manejarRespuesta),
 
-    obtenerPerfilUsuario: (token, id) => fetch(`${API_URL}/api/usuarios/${id}`, { headers: authHeaders(token) }).then(manejarRespuesta),
+  verificarEdad: async (token, imagenBase64) => {
+    const res = await fetch(`${API_URL}/api/usuarios/verificar-edad`, {
+      method: 'POST',
+      headers: jsonHeaders(token),
+      body: JSON.stringify({ imagen: imagenBase64 })
+    });
 
-    cancelarSuscripcion: (token) =>
-      fetch(`${API_URL}/api/stripe/cancelar-suscripcion`, {
-        method: 'POST',
-        headers: authHeaders(token),
-      }).then(manejarRespuesta),
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error al verificar la imagen');
+    return data;
+  },
 
-    obtenerPremiumDestacados: async () => {
-      const res = await fetch(`${API_URL}/api/usuarios/premium-destacados`);
-      if (!res.ok) throw new Error('Error al obtener destacados');
-      return await res.json();
-    },
+  obtenerPerfilUsuario: (token, id) => fetch(`${API_URL}/api/usuarios/${id}`, { headers: authHeaders(token) }).then(manejarRespuesta),
+
+  cancelarSuscripcion: (token) =>
+    fetch(`${API_URL}/api/stripe/cancelar-suscripcion`, {
+      method: 'POST',
+      headers: authHeaders(token),
+    }).then(manejarRespuesta),
+
+  obtenerPremiumDestacados: async () => {
+    const res = await fetch(`${API_URL}/api/usuarios/premium-destacados`);
+    if (!res.ok) throw new Error('Error al obtener destacados');
+    return await res.json();
+  },
+  actualizarRolRiot: (token, posicion_principal) =>
+    fetch(`${API_URL}/api/integraciones/riot/posicion`, {
+      method: 'PUT',
+      headers: jsonHeaders(token),
+      body: JSON.stringify({ posicion_principal }),
+    }).then(manejarRespuesta),
 };

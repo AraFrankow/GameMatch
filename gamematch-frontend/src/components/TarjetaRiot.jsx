@@ -1,4 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
+import TopCampeones from './TopCampeones';
+import { authApi } from '../api';
+
+const ROLES = ['TOP', 'JUNGLE', 'MID', 'ADC', 'SUPPORT'];
 
 function IconoRiot({ rango }) {
   const rangoUpper = (rango || '').toUpperCase();
@@ -94,8 +98,33 @@ function IconoRiot({ rango }) {
   );
 }
 
-export default function TarjetaRiot({ riot }) {
+export default function TarjetaRiot({ riot, token, esMiPerfil, onActualizar }) {
   if (!riot) return null;
+
+  const [editandoRol, setEditandoRol] = useState(false);
+  const [rolActual, setRolActual] = useState(riot.lol_posicion_principal || '');
+
+  let campeones = riot.top_champions;
+  if (typeof campeones === 'string') {
+    try {
+      campeones = JSON.parse(campeones);
+    } catch (e) {
+      campeones = [];
+    }
+  }
+
+  const handleGuardarRol = async (nuevoRol) => {
+    try {
+      setRolActual(nuevoRol);
+      setEditandoRol(false);
+      if (token) {
+        await authApi.actualizarRolRiot(token, nuevoRol);
+        if (onActualizar) onActualizar();
+      }
+    } catch (err) {
+      alert('Error al actualizar rol');
+    }
+  };
 
   const tienePartidas = riot.lol_wins > 0 || riot.lol_losses > 0;
   const winrate = tienePartidas
@@ -103,7 +132,7 @@ export default function TarjetaRiot({ riot }) {
     : 0;
 
   return (
-    <div className="w-full bg-black/20 border border-white/10 rounded-xl p-3 space-y-2 text-left">
+    <div className="w-full bg-black/20 border border-white/10 rounded-xl p-3 space-y-3 text-left">
       <div className="flex items-center gap-3">
         <IconoRiot rango={riot.rango_lol} />
 
@@ -119,9 +148,43 @@ export default function TarjetaRiot({ riot }) {
             )}
           </div>
 
-          <p className="text-[11px] text-white/70 truncate mt-0.5">
-            {riot.riot_username} {riot.nivel_invocador ? `(Nivel ${riot.nivel_invocador})` : ''}
-          </p>
+          <div className="flex items-center justify-between gap-2 mt-0.5">
+            <p className="text-[11px] text-white/70 truncate">
+              {riot.riot_username} {riot.nivel_invocador ? `(Nivel ${riot.nivel_invocador})` : ''}
+            </p>
+
+            {/* MOSTRAR / EDITAR ROL PRINCIPAL */}
+            <div className="flex items-center gap-1 shrink-0">
+            {editandoRol ? (
+                <select
+                value={rolActual}
+                onChange={(e) => handleGuardarRol(e.target.value)}
+                className="bg-surface border border-amber-400 text-amber-300 text-[10px] font-bold px-2 py-0.5 rounded outline-none cursor-pointer"
+                autoFocus
+                >
+                <option value="">Sin Rol</option>
+                {ROLES.map((r) => (
+                    <option key={r} value={r}>
+                    {r}
+                    </option>
+                ))}
+                </select>
+            ) : (
+                <button
+                disabled={!esMiPerfil}
+                onClick={() => setEditandoRol(true)}
+                className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase transition flex items-center gap-1 ${
+                    rolActual
+                    ? 'bg-primary/20 text-primary border border-primary/30'
+                    : 'bg-purple-900/40 text-purple-300 border border-purple-500/40'
+                } ${esMiPerfil ? 'hover:scale-105 cursor-pointer' : 'cursor-default'}`}
+                title={esMiPerfil ? 'Hacé clic para cambiar tu rol' : ''}
+                >
+                {rolActual ? `Rol: ${rolActual}` : 'SIN ROL ✏️'}
+                </button>
+            )}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -134,6 +197,9 @@ export default function TarjetaRiot({ riot }) {
           </span>
         </div>
       )}
+
+      {/* RENDERIZADO DE MAESTRÍAS DE CAMPEONES */}
+      {campeones && campeones.length > 0 && <TopCampeones campeones={campeones} />}
     </div>
   );
 }

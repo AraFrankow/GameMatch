@@ -1,516 +1,290 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { authApi } from '../api';
-import ModalPerfilUsuario from './ModalPerfilUsuario';
-import BotonPremium from './BotonPremium';
-import { SeccionPremiumDestacados } from './SeccionPremiumDestacados';
+import PanelFiltros from './PanelFiltros';
 
-const MODOS = [
-  { value: '', label: 'Cualquiera' },
-  { value: 'competitivo', label: 'Competitivo' },
-  { value: 'casual', label: 'Casual' },
-  { value: 'ambos', label: 'Ambos' },
-];
-const RANGOS = [
-  { value: '', label: 'Cualquiera' },
-  { value: 'menor_18', label: 'Menor de 18' },
-  { value: '18_25', label: '18 a 25' },
-  { value: '26_35', label: '26 a 35' },
-  { value: '36_mas', label: '36 o más' },
-];
-const PLATAFORMAS = [
-  { value: '', label: 'Cualquiera' },
-  { value: 'pc', label: 'PC' },
-  { value: 'consola', label: 'Consola' },
-  { value: 'mobile', label: 'Mobile' },
-];
-const MOTIVOS = [
-  { value: 'lenguaje_inapropiado', label: 'Lenguaje inapropiado' },
-  { value: 'acoso', label: 'Acoso' },
-  { value: 'spam', label: 'Spam' },
-  { value: 'otro', label: 'Otro' },
-];
-const ESTADO_COLOR = { disponible: 'bg-repVerde', ocupado: 'bg-repAmarillo', en_partida: 'bg-repRojo' };
-const ESTADO_LABEL = { disponible: 'Disponible', ocupado: 'Ocupado', en_partida: 'En partida' };
-
-function Select({ label, ...props }) {
-  return (
-    <label className="block">
-      <span className="block text-xs text-white/50 mb-1">{label}</span>
-      <select
-        {...props}
-        className="w-full bg-surface border border-white/10 rounded-lg px-2.5 py-2 text-white text-sm"
-      >
-        {props.children}
-      </select>
-    </label>
-  );
-}
-
-function InsigniasUsuario({ usuario }) {
-  if (!usuario) return null;
-  const esMenor = usuario.rango_edad === 'menor_18';
-  const labelEdad = esMenor ? 'Menor' : 'Adulto';
-
-  return (
-    <div className="flex items-center gap-1.5 flex-wrap my-1">
-      <span
-        className={`text-[10px] px-2 py-0.5 rounded-md font-medium border ${
-          esMenor
-            ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-            : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-        }`}
-      >
-        {labelEdad}
-      </span>
-
-      {Boolean(usuario.verificado) && (
-        <span
-          className="text-[10px] px-2 py-0.5 rounded-md font-medium bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 flex items-center gap-1"
-          title="Cuenta verificada"
-        >
-          ✓ Verificado
-        </span>
-      )}
-
-      {Boolean(usuario.es_premium) && (
-        <span
-          className="text-[10px] px-2 py-0.5 rounded-md font-medium bg-amber-500/10 text-amber-300 border border-amber-500/30 flex items-center gap-1"
-          title="Suscripción Premium activa"
-        >
-          ⭐ Suscripto
-        </span>
-      )}
-    </div>
-  );
-}
-
-export default function Busqueda({ token, usuario, onIrAlChat, onVerPerfil }) {
-  const [juegosCatalogo, setJuegosCatalogo] = useState([]);
-  const [filtros, setFiltros] = useState({
-    juego_id: '',
-    modo_juego: '',
-    rango_edad: '',
-    usa_microfono: '',
-    plataforma: '',
-  });
-  const [resultados, setResultados] = useState(null);
+export default function Busqueda({ token, usuario, onVerPerfil }) {
+  const [jugadores, setJugadores] = useState([]);
+  const [premiumDestacados, setPremiumDestacados] = useState([]);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState('');
-  const [mostrarBloqueados, setMostrarBloqueados] = useState(false);
-  const [destacados, setDestacados] = useState([]);
-  const [perfilDestacadoId, setPerfilDestacadoId] = useState(null);
 
-  useEffect(() => {
-    const cargarDestacados = async () => {
-      try {
-        const res = await authApi.obtenerPremiumDestacados();
-        if (res.exito) setDestacados(res.usuarios);
-      } catch (err) {
-        console.error(err);
-      }
-    };
-    cargarDestacados();
-  }, []);
+  const [reportandoId, setReportandoId] = useState(null);
+  const [motivoReporte, setMotivoReporte] = useState('');
+  const [mensajeModal, setMensajeModal] = useState('');
 
-  const actualizarFiltro = (e) => setFiltros({ ...filtros, [e.target.name]: e.target.value });
+  const [filtros, setFiltros] = useState({
+    modo_juego: '',
+    plataforma: '',
+    rango_edad: '',
+    rango_lol: '',
+    winrate_min: '',
+    sinergia_min: '',
+    rol_preferido: '',
+  });
 
-  const buscar = async () => {
+  const cargarDestacados = async () => {
+    try {
+      const data = await authApi.obtenerPremiumDestacados();
+      setPremiumDestacados(data.usuarios || data || []);
+    } catch (err) {
+      console.error('Error al obtener premium destacados:', err);
+    }
+  };
+
+  const handleBuscar = async () => {
     setCargando(true);
     setError('');
     try {
-      setResultados((await authApi.buscar(token, filtros)).resultados);
+      const res = await authApi.buscar(token, filtros);
+      const lista = Array.isArray(res) ? res : (res.usuarios || []);
+      setJugadores(lista);
     } catch (err) {
-      setError(err.message);
+      console.error('Error al buscar jugadores:', err);
+      setError(err.message || 'Error al realizar la búsqueda');
     } finally {
       setCargando(false);
     }
   };
 
   useEffect(() => {
-    buscar();
+    handleBuscar();
+    cargarDestacados();
   }, []);
 
-  const handleBloqueado = (id) => setResultados((prev) => prev.filter((u) => u.id !== id));
-  if (mostrarBloqueados) return <MisBloqueados token={token} onVolver={() => setMostrarBloqueados(false)} />;
+  const handleBloquear = async (id, username) => {
+    if (!window.confirm(`¿Seguro que querés bloquear a ${username}? No volverás a verlo en tus búsquedas.`)) return;
+    try {
+      await authApi.bloquear(token, id);
+      setJugadores((prev) => prev.filter((j) => j.id !== id));
+      setPremiumDestacados((prev) => prev.filter((p) => p.id !== id));
+    } catch (err) {
+      alert(err.message || 'Error al bloquear usuario');
+    }
+  };
+
+  const handleEnviarReporte = async (e) => {
+    e.preventDefault();
+    if (!motivoReporte.trim()) return;
+    try {
+      await authApi.reportar(token, { reportado_id: reportandoId, motivo: motivoReporte });
+      setMensajeModal('Reporte enviado correctamente.');
+      setTimeout(() => {
+        setReportandoId(null);
+        setMotivoReporte('');
+        setMensajeModal('');
+      }, 1500);
+    } catch (err) {
+      alert(err.message || 'Error al enviar reporte');
+    }
+  };
+
+  const esPremium = Boolean(usuario?.es_premium);
 
   return (
-    <div className="w-full min-h-[calc(100vh-4rem)] bg-gm-gradient p-4 sm:p-6">
-      <div className="max-w-6xl mx-auto space-y-4">
-        {/* Header Superior */}
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold text-white">Buscar jugadores</h1>
-          <button
-            onClick={() => setMostrarBloqueados(true)}
-            className="text-white/50 text-sm hover:text-white transition"
-          >
-            Bloqueados
-          </button>
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          
-          {/* COLUMNA IZQUIERDA: Filtros + Destacados */}
-          <div className="lg:col-span-7 space-y-4">
-            {/* Panel de Filtros */}
-            <div className="bg-card border border-white/10 rounded-2xl p-5 shadow-xl">
-              <h2 className="text-white font-semibold text-sm mb-3">Filtros de búsqueda</h2>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
-                <Select label="Juego" name="juego_id" value={filtros.juego_id} onChange={actualizarFiltro}>
-                  <option value="">Cualquiera</option>
-                  {juegosCatalogo.map((j) => (
-                    <option key={j.id} value={j.id}>
-                      {j.nombre}
-                    </option>
-                  ))}
-                </Select>
-                <Select label="Modo" name="modo_juego" value={filtros.modo_juego} onChange={actualizarFiltro}>
-                  {MODOS.map((m) => (
-                    <option key={m.value} value={m.value}>
-                      {m.label}
-                    </option>
-                  ))}
-                </Select>
-                <Select label="Rango de edad" name="rango_edad" value={filtros.rango_edad} onChange={actualizarFiltro}>
-                  {RANGOS.map((r) => (
-                    <option key={r.value} value={r.value}>
-                      {r.label}
-                    </option>
-                  ))}
-                </Select>
-                <Select label="Plataforma" name="plataforma" value={filtros.plataforma} onChange={actualizarFiltro}>
-                  {PLATAFORMAS.map((p) => (
-                    <option key={p.value} value={p.value}>
-                      {p.label}
-                    </option>
-                  ))}
-                </Select>
-                <Select label="Micrófono" name="usa_microfono" value={filtros.usa_microfono} onChange={actualizarFiltro}>
-                  <option value="">Cualquiera</option>
-                  <option value="true">Con mic</option>
-                  <option value="false">Sin mic</option>
-                </Select>
-              </div>
-              <button
-                onClick={buscar}
-                disabled={cargando}
-                className="w-full bg-primary hover:bg-primary/90 text-white font-medium rounded-lg py-2.5 text-sm transition disabled:opacity-50 shadow-md"
-              >
-                {cargando ? 'Buscando...' : 'Buscar jugadores'}
-              </button>
-            </div>
+    <div className="w-full max-w-6xl mx-auto p-4 space-y-6 text-left">
+      <h2 className="text-xl font-bold text-white">Buscar jugadores</h2>
 
-            {/* Sección Destacados Premium */}
-            <SeccionPremiumDestacados 
-              usuarios={destacados} 
-              onVerPerfil={(id) => {
-                if (onVerPerfil) onVerPerfil(id);
-                else setPerfilDestacadoId(id);
-              }} 
-            />
+      {/* 1. FILTROS EN LA PARTE SUPERIOR */}
+      <PanelFiltros
+        filtros={filtros}
+        setFiltros={setFiltros}
+        esPremium={esPremium}
+        onBuscar={handleBuscar}
+      />
 
-            {/* Banner promocional para usuarios gratuitos */}
-            {!usuario.es_premium && (
-              <div className="bg-surface/50 border border-amber-500/20 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-md">
-                <p className="text-amber-300/90 text-xs leading-relaxed">
-                  ⭐ Con Premium podés filtrar por usuarios verificados, reputación mínima y rol en el juego.
-                </p>
-                <div className="shrink-0">
-                  <BotonPremium token={token} esPremium={usuario.es_premium} />
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* COLUMNA DERECHA: Resultados Generales */}
-          <div className="lg:col-span-5 space-y-3">
-            <div className="flex items-center justify-between px-1">
-              <h2 className="text-white font-semibold text-sm">
-                Jugadores encontrados {resultados ? `(${resultados.length})` : ''}
-              </h2>
-            </div>
-
-            {error && <p className="text-repRojo text-sm bg-repRojo/10 rounded-lg px-3 py-2">{error}</p>}
-
-            {/* Lista deslizable de resultados */}
-            <div className="space-y-2.5 max-h-[calc(100vh-210px)] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-white/10">
-              {resultados && resultados.length === 0 && (
-                <div className="bg-card border border-white/5 rounded-xl p-8 text-center">
-                  <p className="text-white/40 text-sm">No se encontraron jugadores con esos filtros.</p>
-                </div>
-              )}
-              {resultados &&
-                resultados.map((u) => (
-                  <CardUsuario
-                    key={u.id}
-                    usuario={u}
-                    usuarioActual={usuario}
-                    token={token}
-                    onBloqueado={handleBloqueado}
-                    onIrAlChat={onIrAlChat}
-                  />
-                ))}
-            </div>
-          </div>
-
-        </div>
-      </div>
-
-      {/* Modal de perfil al seleccionar un usuario destacado */}
-      {perfilDestacadoId && (
-        <ModalPerfilUsuario
-          token={token}
-          usuarioId={perfilDestacadoId}
-          usuarioActual={usuario}
-          onClose={() => setPerfilDestacadoId(null)}
-          onIrAlChat={onIrAlChat}
-        />
-      )}
-    </div>
-  );
-}
-
-function CardUsuario({ usuario, usuarioActual, token, onBloqueado, onIrAlChat }) {
-  const [menuAbierto, setMenuAbierto] = useState(false);
-  const [formReporte, setFormReporte] = useState(false);
-  const [verPerfil, setVerPerfil] = useState(false);
-  const [motivo, setMotivo] = useState('lenguaje_inapropiado');
-  const [comentario, setComentario] = useState('');
-  const [estadoAccion, setEstadoAccion] = useState('');
-  const [cargando, setCargando] = useState(false);
-
-  const iniciarChatPrivado = async () => {
-    setCargando(true);
-    try {
-      const res = await authApi.crearSala(token, {
-        tipo: 'privada',
-        participante_id: usuario.id,
-      });
-      if (onIrAlChat) {
-        onIrAlChat(res.sala);
-      } else {
-        alert('Chat creado. Podés ingresar desde la pestaña de Chat.');
-      }
-    } catch (err) {
-      setEstadoAccion('error');
-    } finally {
-      setCargando(false);
-    }
-  };
-
-  const bloquear = async () => {
-    setCargando(true);
-    try {
-      await authApi.bloquear(token, usuario.id);
-      onBloqueado(usuario.id);
-    } catch (err) {
-      setEstadoAccion('error');
-    } finally {
-      setCargando(false);
-    }
-  };
-
-  const enviarReporte = async () => {
-    setCargando(true);
-    try {
-      await authApi.reportar(token, { reportado_id: usuario.id, motivo, comentario: comentario || undefined });
-      setEstadoAccion('ok_reporte');
-      setFormReporte(false);
-      setMenuAbierto(false);
-    } catch (err) {
-      setEstadoAccion('error');
-    } finally {
-      setCargando(false);
-    }
-  };
-
-  return (
-    <div className="bg-card border border-white/10 rounded-xl p-3 hover:border-white/20 transition shadow-md">
-      <div className="flex items-center gap-3">
-        {/* Avatar del usuario con borde dorado si es Premium */}
-        <div
-          className={`w-11 h-11 rounded-full bg-surface flex items-center justify-center text-white/40 text-lg overflow-hidden shrink-0 cursor-pointer border ${
-            usuario.es_premium ? 'border-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.25)]' : 'border-white/10'
-          }`}
-          onClick={() => setVerPerfil(true)}
-        >
-          {usuario.foto_perfil ? (
-            <img src={usuario.foto_perfil} alt={usuario.username} className="w-full h-full object-cover" />
-          ) : (
-            usuario.username?.[0]?.toUpperCase()
-          )}
-        </div>
-
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span
-              className="text-white font-medium truncate cursor-pointer hover:underline"
-              onClick={() => setVerPerfil(true)}
-            >
-              {usuario.username}
-            </span>
-          </div>
-
-          <InsigniasUsuario usuario={usuario} />
-
-          <div className="flex items-center gap-1.5 text-xs text-white/50">
-            <span className={`w-1.5 h-1.5 rounded-full ${ESTADO_COLOR[usuario.estado] || 'bg-white/30'}`} />
-            <span>{ESTADO_LABEL[usuario.estado] || 'Desconectado'}</span>
-            {usuario.reputacion_porcentaje !== null && usuario.reputacion_porcentaje !== undefined && (
-              <span>· {usuario.reputacion_porcentaje}% rep</span>
-            )}
-          </div>
-        </div>
-
-        <div className="flex gap-1 shrink-0">
-          {usuario.plataformas &&
-            usuario.plataformas.map((p) => (
-              <span
-                key={p}
-                className="text-[10px] bg-surface text-white/50 px-1.5 py-0.5 rounded border border-white/5 uppercase"
-              >
-                {p}
+      {/* 2. JUGADORES PREMIUM DESTACADOS */}
+      {premiumDestacados.length > 0 && (
+        <div className="bg-amber-500/5 border border-amber-500/30 rounded-2xl p-4 space-y-3 shadow-lg">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-amber-400 font-bold text-sm">⭐ Jugadores Premium Destacados</span>
+              <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-full font-semibold">
+                Prioridad
               </span>
-            ))}
-        </div>
-
-        <button
-          onClick={() => setMenuAbierto(!menuAbierto)}
-          className="text-white/30 hover:text-white/70 text-lg leading-none px-1 shrink-0"
-        >
-          ⋮
-        </button>
-      </div>
-
-      {menuAbierto && !formReporte && (
-        <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-white/5">
-          <button
-            onClick={iniciarChatPrivado}
-            disabled={cargando}
-            className="bg-primary hover:bg-primary/90 text-white text-xs rounded-lg py-1.5 transition disabled:opacity-50 font-medium"
-          >
-            Hablar
-          </button>
-          <button
-            onClick={() => setVerPerfil(true)}
-            className="bg-surface hover:bg-white/10 text-white/80 text-xs rounded-lg py-1.5 transition"
-          >
-            Ver perfil
-          </button>
-          <button
-            onClick={bloquear}
-            disabled={cargando}
-            className="bg-surface hover:bg-white/10 text-white/80 text-xs rounded-lg py-1.5 transition disabled:opacity-50"
-          >
-            Bloquear
-          </button>
-          <button
-            onClick={() => setFormReporte(true)}
-            className="bg-surface hover:bg-white/10 text-white/80 text-xs rounded-lg py-1.5 transition"
-          >
-            Reportar
-          </button>
-        </div>
-      )}
-
-      {formReporte && (
-        <div className="mt-3 pt-3 border-t border-white/5 space-y-2">
-          <select
-            value={motivo}
-            onChange={(e) => setMotivo(e.target.value)}
-            className="w-full bg-surface border border-white/10 rounded-lg px-2 py-1.5 text-white text-xs"
-          >
-            {MOTIVOS.map((m) => (
-              <option key={m.value} value={m.value}>
-                {m.label}
-              </option>
-            ))}
-          </select>
-          <input
-            value={comentario}
-            onChange={(e) => setComentario(e.target.value)}
-            placeholder="Comentario (opcional)"
-            className="w-full bg-surface border border-white/10 rounded-lg px-2 py-1.5 text-white text-xs"
-          />
-          <div className="flex gap-2">
-            <button
-              onClick={enviarReporte}
-              disabled={cargando}
-              className="flex-1 bg-repRojo/80 hover:bg-repRojo text-white text-xs rounded-lg py-1.5 transition disabled:opacity-50"
-            >
-              Enviar reporte
-            </button>
-            <button
-              onClick={() => setFormReporte(false)}
-              className="flex-1 bg-surface hover:bg-white/10 text-white/70 text-xs rounded-lg py-1.5 transition"
-            >
-              Cancelar
-            </button>
+            </div>
+            <span className="text-xs text-white/40">Aparecé acá obteniendo Premium</span>
           </div>
-        </div>
-      )}
 
-      {estadoAccion === 'ok_reporte' && <p className="text-repVerde text-xs mt-2">Reporte enviado</p>}
-      {estadoAccion === 'error' && <p className="text-repRojo text-xs mt-2">Hubo un error, intentá de nuevo</p>}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            {premiumDestacados.map((p) => (
+              <div
+                key={p.id}
+                className="bg-card/90 border border-amber-500/40 rounded-xl p-3 flex flex-col items-center text-center space-y-2 hover:border-amber-400 transition shadow-[0_0_10px_rgba(251,191,36,0.1)]"
+              >
+                <div className="w-12 h-12 rounded-full bg-surface border-2 border-amber-400 overflow-hidden flex items-center justify-center text-base font-bold text-white relative">
+                  {p.foto_perfil ? (
+                    <img src={p.foto_perfil} alt={p.username} className="w-full h-full object-cover" />
+                  ) : (
+                    (p.username?.[0] || 'U').toUpperCase()
+                  )}
+                  <span className="absolute bottom-0 right-0 text-[10px]">⭐</span>
+                </div>
 
-      {verPerfil && (
-        <ModalPerfilUsuario
-          token={token}
-          usuarioId={usuario.id}
-          usuarioActual={usuarioActual}
-          onClose={() => setVerPerfil(false)}
-          onIrAlChat={onIrAlChat}
-        />
-      )}
-    </div>
-  );
-}
+                <div className="w-full min-w-0">
+                  <p className="text-xs font-bold text-white truncate">{p.username}</p>
+                  <p className="text-[10px] text-white/50 truncate">
+                    {p.rango_edad ? `Rango: ${p.rango_edad}` : 'Adulto'}
+                  </p>
+                </div>
 
-function MisBloqueados({ token, onVolver }) {
-  const [bloqueados, setBloqueados] = useState(null);
-  const [error, setError] = useState('');
-  
-  const cargar = async () => {
-    try {
-      setBloqueados((await authApi.listarBloqueos(token)).bloqueos);
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-  useEffect(() => {
-    cargar();
-  }, []);
-  const desbloquear = async (id) => {
-    try {
-      await authApi.desbloquear(token, id);
-      setBloqueados((prev) => prev.filter((b) => b.bloqueado.id !== id));
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-  return (
-    <div className="min-h-screen bg-gm-gradient p-4">
-      <div className="max-w-2xl mx-auto">
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-xl font-bold text-white">Bloqueados</h1>
-          <button onClick={onVolver} className="text-white/50 text-sm hover:text-white transition">
-            ← Volver a buscar
-          </button>
-        </div>
-        {error && <p className="text-repRojo text-sm mb-3 bg-repRojo/10 rounded-lg px-3 py-2">{error}</p>}
-        {bloqueados && bloqueados.length === 0 && (
-          <p className="text-white/40 text-sm text-center py-8">No bloqueaste a nadie todavía.</p>
-        )}
-        <div className="space-y-2">
-          {bloqueados &&
-            bloqueados.map((b) => (
-              <div key={b.id} className="bg-card border border-white/10 rounded-xl p-3 flex items-center justify-between">
-                <span className="text-white text-sm">{b.bloqueado.username}</span>
-                <button onClick={() => desbloquear(b.bloqueado.id)} className="text-primary text-xs hover:underline">
-                  Desbloquear
+                <button
+                  onClick={() => onVerPerfil && onVerPerfil(p.id)}
+                  className="w-full bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px] py-1 rounded-lg transition font-medium"
+                >
+                  Ver perfil
                 </button>
               </div>
             ))}
+          </div>
         </div>
+      )}
+
+      {/* 3. RESULTADOS DE BÚSQUEDA */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between border-b border-white/10 pb-2">
+          <h3 className="text-sm font-bold text-white/90">Jugadores encontrados</h3>
+          <span className="text-xs text-white/40">
+            {jugadores.length} {jugadores.length === 1 ? 'resultado' : 'resultados'}
+          </span>
+        </div>
+
+        {cargando && (
+          <div className="bg-card p-6 rounded-2xl border border-white/5 text-center text-xs text-white/50">
+            Buscando jugadores compatibles...
+          </div>
+        )}
+
+        {error && (
+          <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-xl text-xs">
+            {error}
+          </div>
+        )}
+
+        {!cargando && !error && jugadores.length === 0 && (
+          <div className="bg-card border border-white/10 rounded-2xl p-8 text-center text-white/50 text-xs">
+            No se encontraron jugadores con los filtros aplicados.
+          </div>
+        )}
+
+        {!cargando && jugadores.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {jugadores.map((j) => (
+              <div
+                key={j.id}
+                className={`bg-card border rounded-2xl p-4 flex flex-col justify-between space-y-3 transition shadow-md ${
+                  j.es_premium ? 'border-amber-500/30' : 'border-white/10 hover:border-white/20'
+                }`}
+              >
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-full bg-surface border border-white/10 overflow-hidden shrink-0 flex items-center justify-center font-bold text-white">
+                        {j.foto_perfil ? (
+                          <img src={j.foto_perfil} alt={j.username} className="w-full h-full object-cover" />
+                        ) : (
+                          (j.username?.[0] || 'U').toUpperCase()
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-white truncate flex items-center gap-1">
+                          <span>{j.username}</span>
+                          {j.es_premium && <span className="text-[10px]">⭐</span>}
+                        </p>
+                        <p className="text-[10px] text-white/50 truncate">
+                          {j.rango_edad ? `Rango: ${j.rango_edad}` : 'Jugador GameMatch'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Badge Sinergia */}
+                    {j.sinergia_porcentaje !== undefined && (
+                      <span className="bg-primary/20 border border-primary/30 text-primary font-bold text-[11px] px-2 py-0.5 rounded-full shrink-0">
+                        ⚡ {j.sinergia_porcentaje}%
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Tarjeta Resumen Riot */}
+                  {j.riot && (
+                    <div className="bg-black/30 border border-white/5 rounded-xl p-2 text-[11px] flex items-center justify-between">
+                      <span className="text-amber-400 font-bold">{j.riot.rango_lol || 'UNRANKED'}</span>
+                      {j.lol_winrate > 0 && (
+                        <span className="text-emerald-400 font-semibold">{j.lol_winrate}% WR</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* BOTONES DE ACCIÓN: VER PERFIL, BLOQUEAR, REPORTAR */}
+                <div className="space-y-2 pt-2 border-t border-white/5">
+                  <button
+                    onClick={() => onVerPerfil && onVerPerfil(j.id)}
+                    className="w-full bg-primary/90 hover:bg-primary text-white text-xs py-2 rounded-xl transition font-medium shadow-md"
+                  >
+                    Ver perfil
+                  </button>
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleBloquear(j.id, j.username)}
+                      className="flex-1 bg-surface hover:bg-red-500/10 text-white/50 hover:text-red-400 border border-white/10 hover:border-red-500/20 text-[11px] py-1.5 rounded-lg transition"
+                    >
+                      Bloquear
+                    </button>
+                    <button
+                      onClick={() => setReportandoId(j.id)}
+                      className="flex-1 bg-surface hover:bg-amber-500/10 text-white/50 hover:text-amber-400 border border-white/10 hover:border-amber-500/20 text-[11px] py-1.5 rounded-lg transition"
+                    >
+                      Reportar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
+
+      {/* MODAL DE REPORTAR */}
+      {reportandoId && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-card border border-white/10 rounded-2xl p-5 max-w-sm w-full space-y-4 shadow-2xl">
+            <h3 className="text-sm font-bold text-white">Reportar Usuario</h3>
+            
+            {mensajeModal ? (
+              <p className="text-xs text-emerald-400 bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20">
+                {mensajeModal}
+              </p>
+            ) : (
+              <form onSubmit={handleEnviarReporte} className="space-y-3">
+                <textarea
+                  rows="3"
+                  placeholder="Escribí el motivo del reporte (ej. comportamiento tóxico, cuenta falsa)..."
+                  value={motivoReporte}
+                  onChange={(e) => setMotivoReporte(e.target.value)}
+                  className="w-full bg-surface border border-white/10 rounded-xl p-2.5 text-xs text-white outline-none focus:border-primary resize-none"
+                  required
+                />
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setReportandoId(null); setMotivoReporte(''); }}
+                    className="bg-surface text-white/60 text-xs px-3 py-1.5 rounded-lg"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="bg-red-500 hover:bg-red-600 text-white text-xs px-3 py-1.5 rounded-lg font-medium"
+                  >
+                    Enviar Reporte
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

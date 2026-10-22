@@ -3,8 +3,8 @@ const path = require('path');
 const { Sequelize } = require('sequelize');
 const { RekognitionClient, DetectFacesCommand } = require('@aws-sdk/client-rekognition');
 const { Usuario, IntegracionRiot, IntegracionSteam } = require('../models');
+const { calcularSinergiaDuo } = require('../utils/sinergia');
 
-// Inicialización del cliente oficial de AWS Rekognition
 const rekognition = new RekognitionClient({
   region: process.env.AWS_REGION || 'us-east-1',
   credentials: {
@@ -41,10 +41,18 @@ const obtenerPerfilPorId = async (req, res) => {
 
     const u = usuarioRaw.toJSON();
 
+    let sinergia_porcentaje = 50;
+    if (req.usuario && String(req.usuario.id) !== String(id)) {
+      const miRiot = await IntegracionRiot.findOne({ where: { usuario_id: req.usuario.id } });
+      const solicitante = { riot: miRiot ? miRiot.toJSON() : null };
+      sinergia_porcentaje = calcularSinergiaDuo(solicitante, { riot: u.riot, reputacion_porcentaje: u.reputacion_porcentaje });
+    }
+
     const usuario = {
       ...u,
       es_premium: Boolean(u.es_premium || u.esPremium || Number(u.es_premium) === 1),
-      verificado: Boolean(u.verificado || u.estaVerificado)
+      verificado: Boolean(u.verificado || u.estaVerificado),
+      sinergia_porcentaje
     };
 
     return res.json({
@@ -70,11 +78,9 @@ const verificarCamara = async (req, res) => {
       });
     }
 
-    // 1. Convertir Base64 a Buffer
     const base64Data = imagen.replace(/^data:image\/\w+;base64,/, '');
     const bufferImagen = Buffer.from(base64Data, 'base64');
 
-    // 2. Enviar la imagen directamente a AWS Rekognition
     const command = new DetectFacesCommand({
       Image: { Bytes: bufferImagen },
       Attributes: ['ALL']
@@ -89,14 +95,12 @@ const verificarCamara = async (req, res) => {
       });
     }
 
-    // 3. Extraer rango de edad estimado por la IA de AWS
     const faceDetail = rekognitionResponse.FaceDetails[0];
     const ageRange = faceDetail.AgeRange || { Low: 18, High: 24 };
     const edadEstimada = Math.round((ageRange.Low + ageRange.High) / 2);
     const ageMin = ageRange.Low;
     const ageMax = ageRange.High;
 
-    // 4. Evaluación de Reglas
     const rangoEdadDeclarado = req.usuario?.rango_edad;
     const esMayorDeclarado = rangoEdadDeclarado && rangoEdadDeclarado !== 'menor_18';
     const esMayorIA = edadEstimada >= 18;
@@ -142,7 +146,6 @@ const verificarCamara = async (req, res) => {
       }
     }
 
-    // 5. Guardar foto localmente y actualizar BD
     const usuarioId = req.usuario?.id || Date.now();
     const nombreArchivo = `verificacion_${usuarioId}_${Date.now()}.jpg`;
     const carpetaDestino = path.join(__dirname, '../uploads/verificaciones');

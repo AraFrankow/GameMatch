@@ -23,6 +23,11 @@ const IntegracionRiot = sequelize.define('IntegracionRiot', {
     type: DataTypes.ENUM('TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'UTILITY'), 
     allowNull: true 
   },
+  top_champions: {
+    type: DataTypes.JSON,
+    allowNull: true,
+    defaultValue: []
+  },
 
   // Valorant
   rango_valorant: { type: DataTypes.STRING(50), allowNull: true },

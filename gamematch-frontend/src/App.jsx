@@ -5,6 +5,7 @@ import Busqueda from './components/Busqueda';
 import Chat from './components/Chat';
 import MiPerfil from './components/MiPerfil';
 import Landing from './components/Landing';
+import ModalPerfilUsuario from './components/ModalPerfilUsuario';
 import { socket } from './socket';
 
 const RANGOS_EDAD = [
@@ -48,6 +49,7 @@ export default function App() {
 
   const [vista, setVista] = useState(sesion ? 'busqueda' : 'landing');
   const [salaActivaId, setSalaActivaId] = useState(null);
+  const [perfilVerId, setPerfilVerId] = useState(null); // ID para abrir el ModalPerfilUsuario
   const [error, setError] = useState('');
   const [cargando, setCargando] = useState(false);
   const [googlePendiente, setGooglePendiente] = useState(null);
@@ -87,9 +89,13 @@ export default function App() {
       return actualizada;
     });
 
-    // Reconectar socket con los datos frescos del usuario
     socket.disconnect();
     socket.connect();
+  };
+
+  // Abre el ModalPerfilUsuario al hacer clic en "Ver perfil"
+  const handleVerPerfil = (idUsuario) => {
+    setPerfilVerId(idUsuario);
   };
 
   // --- CAPTURAR RETORNO DE PAGO DE STRIPE ---
@@ -131,7 +137,6 @@ export default function App() {
 
   useEffect(() => {
     if (sesion?.token) {
-      // Sincronizar datos del usuario directo desde MySQL
       authApi.obtenerMiPerfil(sesion.token)
         .then((data) => {
           const p = data.perfil || data.usuario || data;
@@ -266,6 +271,7 @@ export default function App() {
     setSesion(null);
     setVista('landing');
     setSalaActivaId(null);
+    setPerfilVerId(null);
     setNotificaciones([]);
     setMensajesNoLeidos({});
     setForm({ username: '', email: '', password: '', rango_edad: '18_25' });
@@ -404,7 +410,12 @@ export default function App() {
 
         <main className="flex-1">
           {vista === 'busqueda' ? (
-            <Busqueda token={sesion.token} usuario={sesion.usuario} onVolver={() => setVista('busqueda')} />
+            <Busqueda 
+              token={sesion.token} 
+              usuario={sesion.usuario} 
+              onVerPerfil={handleVerPerfil} 
+              onVolver={() => setVista('busqueda')} 
+            />
           ) : vista === 'chat' ? (
             <Chat 
               token={sesion.token} 
@@ -424,6 +435,21 @@ export default function App() {
             />
           ) : null}
         </main>
+
+        {/* RENDERIZADO DEL MODAL SOBRE LA PANTALLA ACTUAL */}
+        {perfilVerId && (
+          <ModalPerfilUsuario
+            token={sesion.token}
+            usuarioId={perfilVerId}
+            usuarioActual={sesion.usuario}
+            onClose={() => setPerfilVerId(null)}
+            onIrAlChat={(sala) => {
+              setPerfilVerId(null);
+              setVista('chat');
+              if (sala?.id) setSalaActivaId(sala.id);
+            }}
+          />
+        )}
       </div>
     </GoogleOAuthProvider>
   );

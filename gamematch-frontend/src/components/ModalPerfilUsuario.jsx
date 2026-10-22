@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { authApi } from '../api';
 import TarjetaRiot from './TarjetaRiot';
+import BadgeSinergia from './BadgeSinergia';
 
 const ESTADO_COLOR = {
   online: 'bg-emerald-500',
@@ -64,6 +65,7 @@ export default function ModalPerfilUsuario({ token, usuarioId, usuarioActual, on
   const [perfil, setPerfil] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
+  const esUsuarioActualPremium = Boolean(usuarioActual?.es_premium);
 
   useEffect(() => {
     if (!usuarioId) return;
@@ -144,6 +146,10 @@ export default function ModalPerfilUsuario({ token, usuarioId, usuarioActual, on
                   <span>· {perfil.reputacion_porcentaje}% rep</span>
                 )}
               </div>
+
+              {esUsuarioActualPremium && perfil && perfil.sinergia_porcentaje !== undefined && (
+                <BadgeSinergia porcentaje={perfil.sinergia_porcentaje} />
+              )}
 
               {/* INTEGRACIÓN RIOT GAMES */}
               {riot && <TarjetaRiot riot={riot} />}
