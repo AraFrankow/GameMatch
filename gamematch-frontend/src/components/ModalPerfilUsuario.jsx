@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { authApi } from '../api';
+import TarjetaRiot from './TarjetaRiot';
 
 const ESTADO_COLOR = {
   online: 'bg-emerald-500',
@@ -19,7 +20,7 @@ function InsigniasUsuario({ usuario }) {
   if (!usuario) return null;
   const esMenor = usuario.rango_edad === 'menor_18';
   const labelEdad = esMenor ? 'Menor' : 'Adulto';
-  
+
   const esPremium = Boolean(usuario.es_premium || usuario.esPremium || Number(usuario.es_premium) === 1);
   const estaVerificado = Boolean(usuario.verificado || usuario.estaVerificado);
 
@@ -70,9 +71,15 @@ export default function ModalPerfilUsuario({ token, usuarioId, usuarioActual, on
     authApi
       .perfilPublico(token, usuarioId)
       .then((data) => {
-        console.log('📦 Datos devueltos por perfilPublico:', data);
         const u = data.usuario || data.perfil || data;
-        setPerfil(u);
+        const riot = data.riot || u.riot || u.IntegracionRiot || null;
+        const steam = data.steam || u.steam || u.IntegracionSteam || null;
+
+        setPerfil({
+          ...u,
+          riot,
+          steam,
+        });
       })
       .catch((err) => setError(err.message))
       .finally(() => setCargando(false));
@@ -96,6 +103,7 @@ export default function ModalPerfilUsuario({ token, usuarioId, usuarioActual, on
   if (!usuarioId) return null;
 
   const esPremium = perfil ? Boolean(perfil.es_premium || perfil.esPremium || Number(perfil.es_premium) === 1) : false;
+  const riot = perfil?.riot;
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -129,17 +137,20 @@ export default function ModalPerfilUsuario({ token, usuarioId, usuarioActual, on
 
               <InsigniasUsuario usuario={perfil} />
 
-              <div className="flex items-center justify-center gap-1.5 text-xs text-white/50">
+              <div className="flex items-center justify-center gap-1.5 text-xs text-white/50 mb-3">
                 <span className={`w-2 h-2 rounded-full ${ESTADO_COLOR[perfil.estado] || 'bg-white/30'}`} />
                 <span>{ESTADO_LABEL[perfil.estado] || 'Desconectado'}</span>
                 {perfil.reputacion_porcentaje !== null && perfil.reputacion_porcentaje !== undefined && (
                   <span>· {perfil.reputacion_porcentaje}% rep</span>
                 )}
               </div>
+
+              {/* INTEGRACIÓN RIOT GAMES */}
+              {riot && <TarjetaRiot riot={riot} />}
             </div>
 
             {usuarioActual?.id !== perfil.id && (
-              <div className="flex flex-col w-full gap-2 pt-3">
+              <div className="flex flex-col w-full gap-2 pt-1">
                 <button
                   onClick={iniciarChatPrivado}
                   className="w-full bg-primary hover:bg-primary/90 text-white font-medium py-2.5 rounded-xl transition text-sm flex items-center justify-center gap-2 shadow-lg"

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { authApi } from '../api';
 import VerificacionCamara from './VerificacionCamara';
 import BotonPremium from './BotonPremium';
+import TarjetaRiot from './TarjetaRiot';
 
 const RANGOS_EDAD = [
   { value: 'menor_18', label: 'Menor de 18' },
@@ -11,29 +12,13 @@ const RANGOS_EDAD = [
 ];
 
 export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver }) {
+  const [perfil, setPerfil] = useState(null);
   const [editando, setEditando] = useState(false);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState('');
   const [exito, setExito] = useState('');
-  const [tipoFoto, setTipoFoto] = useState('url');
 
-  const [mostrarCamara, setMostrarCamara] = useState(false);
-  const [edadVerificada, setEdadVerificada] = useState(null);
-
-  const [mostrarRiotInput, setMostrarRiotInput] = useState(false);
-  const [riotForm, setRiotForm] = useState({ game_name: '', tag_line: '', region: 'las' });
-
-  const [mostrarSteamInput, setMostrarSteamInput] = useState(false);
-  const [steamIdInput, setSteamIdInput] = useState('');
-
-  const [cargandoIntegracion, setCargandoIntegracion] = useState(false);
-  const [errorIntegracion, setErrorIntegracion] = useState('');
-
-  const [perfilData, setPerfilData] = useState(null);
-  const [datosRiot, setDatosRiot] = useState(null);
-  const [datosSteam, setDatosSteam] = useState(null);
-  const [juegosLista, setJuegosLista] = useState([]);
-
+  // Formularios de edición
   const [form, setForm] = useState({
     username: usuario?.username || '',
     foto_perfil: usuario?.foto_perfil || '',
@@ -41,77 +26,73 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
     biografia: usuario?.biografia || '',
   });
 
-  const cargarPerfil = () => {
-    authApi
-      .obtenerMiPerfil(token)
-      .then((data) => {
-        const p = data.perfil || data.usuario || data;
-        setPerfilData(p);
+  const [tipoFoto, setTipoFoto] = useState('url');
+  const [mostrarCamara, setMostrarCamara] = useState(false);
+  const [edadVerificada, setEdadVerificada] = useState(usuario?.edad_estimada || null);
 
-        const juegosHallados =
-          data.juegos ||
-          p.juegos ||
-          p.usuario_juegos ||
-          p.steam?.juegos ||
-          [];
+  // Integraciones (Riot / Steam)
+  const [datosRiot, setDatosRiot] = useState(null);
+  const [datosSteam, setDatosSteam] = useState(null);
+  const [juegosLista, setJuegosLista] = useState([]);
+  const [mostrarRiotInput, setMostrarRiotInput] = useState(false);
+  const [mostrarSteamInput, setMostrarSteamInput] = useState(false);
+  const [riotForm, setRiotForm] = useState({ game_name: '', tag_line: '', region: 'las' });
+  const [steamIdInput, setSteamIdInput] = useState('');
+  const [cargandoIntegracion, setCargandoIntegracion] = useState(false);
+  const [errorIntegracion, setErrorIntegracion] = useState('');
 
-        setDatosSteam(p.steam || null);
-        setDatosRiot(p.riot || null);
-        setJuegosLista(juegosHallados);
-
-        if (p.edad_estimada || p.edadEstimada) {
-          setEdadVerificada(p.edad_estimada || p.edadEstimada);
-        }
-
+  const cargarPerfil = async () => {
+    try {
+      const res = await authApi.obtenerMiPerfil(token);
+      if (res.perfil) {
+        setPerfil(res.perfil);
+        setDatosRiot(res.perfil.riot || null);
+        setDatosSteam(res.perfil.steam || null);
+        setJuegosLista(res.perfil.juegos || []);
         setForm({
-          username: p.username || '',
-          foto_perfil: p.foto_perfil || '',
-          rango_edad: p.rango_edad || '18_25',
-          biografia: p.biografia || '',
+          username: res.perfil.username || '',
+          foto_perfil: res.perfil.foto_perfil || '',
+          rango_edad: res.perfil.rango_edad || '18_25',
+          biografia: res.perfil.biografia || '',
         });
-
-        if (onActualizarUsuario) onActualizarUsuario(p);
-      })
-      .catch((err) => setError(err.message));
+      }
+    } catch (err) {
+      console.error('Error al cargar perfil:', err);
+    }
   };
 
   useEffect(() => {
     cargarPerfil();
-  }, []);
+  }, [token]);
+
+  const handleChange = (e) => {
+    setForm({ ...form, [e.target.name]: e.target.value });
+  };
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
-    if (!file) return;
-
-    if (file.size > 2 * 1024 * 1024) {
-      setError('La imagen es demasiado grande. Seleccioná una de menos de 2 MB.');
-      return;
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setForm((prev) => ({ ...prev, foto_perfil: reader.result }));
+      };
+      reader.readAsDataURL(file);
     }
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setForm((prev) => ({ ...prev, foto_perfil: reader.result }));
-    };
-    reader.readAsDataURL(file);
   };
-
-  const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
   const handleGuardar = async (e) => {
     e.preventDefault();
+    setCargando(true);
     setError('');
     setExito('');
-    setCargando(true);
 
     try {
-      const res = await authApi.actualizarMiPerfil(token, form);
-      const perfilActualizado = res.perfil || res;
-
-      setExito('¡Perfil actualizado con éxito!');
-      setEditando(false);
-
-      if (onActualizarUsuario) {
-        onActualizarUsuario(perfilActualizado);
+      const res = await authApi.actualizarPerfil(token, form);
+      if (res.perfil) {
+        setExito('Perfil actualizado con éxito');
+        setEditando(false);
+        if (onActualizarUsuario) onActualizarUsuario(res.perfil);
+        cargarPerfil();
       }
     } catch (err) {
       setError(err.message || 'Error al guardar los cambios');
@@ -122,16 +103,18 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
 
   const handleVincularRiot = async (e) => {
     e.preventDefault();
-    setErrorIntegracion('');
     setCargandoIntegracion(true);
+    setErrorIntegracion('');
+
     try {
       const res = await authApi.vincularRiot(token, riotForm);
-      setDatosRiot(res.integracion);
-      setMostrarRiotInput(false);
-      setRiotForm({ game_name: '', tag_line: '', region: 'las' });
-      setExito('¡Cuenta de Riot Games vinculada!');
+      if (res.exito) {
+        setMostrarRiotInput(false);
+        setRiotForm({ game_name: '', tag_line: '', region: 'las' });
+        cargarPerfil();
+      }
     } catch (err) {
-      setErrorIntegracion(err.message || 'Error al vincular cuenta de Riot');
+      setErrorIntegracion(err.message || 'Error al vincular Riot ID');
     } finally {
       setCargandoIntegracion(false);
     }
@@ -139,47 +122,39 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
 
   const handleVincularSteam = async (e) => {
     e.preventDefault();
-    setErrorIntegracion('');
     setCargandoIntegracion(true);
+    setErrorIntegracion('');
+
     try {
       const res = await authApi.vincularSteam(token, steamIdInput);
-      setDatosSteam(res.integracion);
-      setMostrarSteamInput(false);
-      setSteamIdInput('');
-
-      const imp = res.importacion?.importados || 0;
-      setExito(`¡Cuenta de Steam vinculada! Se importaron ${imp} juegos al catálogo.`);
-
-      cargarPerfil();
+      if (res.exito) {
+        setMostrarSteamInput(false);
+        setSteamIdInput('');
+        cargarPerfil();
+      }
     } catch (err) {
-      setErrorIntegracion(err.message || 'Error al vincular cuenta de Steam');
+      setErrorIntegracion(err.message || 'Error al vincular Steam');
     } finally {
       setCargandoIntegracion(false);
     }
   };
 
-  const handleDesvincular = async (plataforma) => {
-    if (!window.confirm(`¿Seguro que querés desvincular tu cuenta de ${plataforma}?`)) return;
-    setErrorIntegracion('');
+  const handleDesvincular = async (tipo) => {
+    if (!window.confirm(`¿Querés desvincular tu cuenta de ${tipo.toUpperCase()}?`)) return;
     try {
-      await authApi.desvincularIntegracion(token, plataforma);
-      if (plataforma === 'riot') setDatosRiot(null);
-      if (plataforma === 'steam') {
-        setDatosSteam(null);
-        cargarPerfil();
-      }
-      setExito(`¡Cuenta de ${plataforma} desvinculada con éxito!`);
+      if (tipo === 'riot') await authApi.desvincularRiot(token);
+      if (tipo === 'steam') await authApi.desvincularSteam(token);
+      cargarPerfil();
     } catch (err) {
-      setErrorIntegracion(err.message || 'Error al desvincular cuenta');
+      setErrorIntegracion(err.message || 'Error al desvincular');
     }
   };
 
+  const esPremium = Boolean(usuario?.es_premium || perfil?.es_premium);
+  const estaVerificado = Boolean(usuario?.verificado || perfil?.verificado);
+  const edadMostrar = edadVerificada || usuario?.edad_estimada || perfil?.edad_estimada;
+  const esMayorDeEdad = form.rango_edad !== 'menor_18';
   const rangoTexto = RANGOS_EDAD.find((r) => r.value === form.rango_edad)?.label || form.rango_edad;
-  const esMayorDeEdad = form.rango_edad && form.rango_edad !== 'menor_18';
-
-  const estaVerificado = perfilData?.verificado || usuario?.verificado;
-  const esPremium = perfilData?.es_premium || usuario?.es_premium;
-  const edadMostrar = edadVerificada || perfilData?.edad_estimada || usuario?.edad_estimada;
 
   return (
     <div className="w-full max-w-4xl mx-auto p-4 sm:p-6 space-y-6">
@@ -261,7 +236,6 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
           {esPremium ? (
             <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-5 space-y-4">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                {/* Lado izquierdo: Ícono + Título + Badge + Descripción */}
                 <div className="flex items-start gap-3.5">
                   <span className="text-3xl shrink-0 mt-0.5">⭐</span>
                   <div className="space-y-1">
@@ -269,7 +243,7 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
                       <p className="text-amber-300 font-bold text-base whitespace-nowrap">
                         GameMatch Premium Activo
                       </p>
-                      
+
                       <span
                         className={`text-[11px] border px-2.5 py-0.5 rounded-full font-semibold whitespace-nowrap ${
                           usuario?.cancel_at_period_end
@@ -289,7 +263,6 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
                   </div>
                 </div>
 
-                {/* Lado derecho: Botón de cancelación o Badge de vencimiento */}
                 <div className="shrink-0 self-start md:self-center w-full md:w-auto">
                   {!usuario?.cancel_at_period_end ? (
                     <button
@@ -321,7 +294,6 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
                 </div>
               </div>
 
-              {/* Beneficios */}
               <div className="pt-3.5 border-t border-amber-500/20 flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-8 text-xs text-white/80">
                 <div className="flex items-center gap-2">
                   <span className="text-amber-400 font-bold">✓</span> Filtros avanzados en búsquedas
@@ -526,14 +498,8 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
                     </form>
                   )}
 
-                  {datosRiot && (
-                    <div className="pt-2 border-t border-white/5 bg-black/20 p-2.5 rounded-lg flex items-center justify-between text-xs">
-                      <span className="text-yellow-400 font-bold">Rango del LoL:</span>
-                      <span className="text-white font-medium">
-                        {datosRiot.rango_lol || 'Sin Clasificar / Unranked'}
-                      </span>
-                    </div>
-                  )}
+                  {/* TARJETA DETALLADA DE ESTADÍSTICAS LOL */}
+                  {datosRiot && <TarjetaRiot riot={datosRiot} />}
                 </div>
 
                 {/* Steam */}

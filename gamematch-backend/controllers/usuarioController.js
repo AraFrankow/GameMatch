@@ -28,7 +28,11 @@ const obtenerPerfilPorId = async (req, res) => {
     const { id } = req.params;
 
     const usuarioRaw = await Usuario.findByPk(id, {
-      attributes: { exclude: ['password_hash'] }
+      attributes: { exclude: ['password_hash'] },
+      include: [
+        { model: IntegracionRiot, as: 'riot' },
+        { model: IntegracionSteam, as: 'steam' }
+      ]
     });
 
     if (!usuarioRaw) {
@@ -43,14 +47,11 @@ const obtenerPerfilPorId = async (req, res) => {
       verificado: Boolean(u.verificado || u.estaVerificado)
     };
 
-    const riot = await IntegracionRiot?.findOne({ where: { usuario_id: id } });
-    const steam = await IntegracionSteam?.findOne({ where: { usuario_id: id } });
-
     return res.json({
       exito: true,
       usuario,
-      riot: riot || null,
-      steam: steam || null
+      riot: u.riot || null,
+      steam: u.steam || null
     });
   } catch (error) {
     console.error('Error en obtenerPerfilPorId:', error);
