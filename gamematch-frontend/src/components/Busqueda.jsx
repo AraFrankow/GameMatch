@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { authApi } from '../api';
 import ModalPerfilUsuario from './ModalPerfilUsuario';
 import BotonPremium from './BotonPremium';
+import { SeccionPremiumDestacados } from './SeccionPremiumDestacados';
 
 const MODOS = [
   { value: '', label: 'Cualquiera' },
@@ -37,7 +38,7 @@ function Select({ label, ...props }) {
       <span className="block text-xs text-white/50 mb-1">{label}</span>
       <select
         {...props}
-        className="w-full bg-surface border border-white/10 rounded-lg px-2 py-1.5 text-white text-sm"
+        className="w-full bg-surface border border-white/10 rounded-lg px-2.5 py-2 text-white text-sm"
       >
         {props.children}
       </select>
@@ -45,7 +46,6 @@ function Select({ label, ...props }) {
   );
 }
 
-// Componente Helper de Insignias (Adulto/Menor + Verificado + Suscripto)
 function InsigniasUsuario({ usuario }) {
   if (!usuario) return null;
   const esMenor = usuario.rango_edad === 'menor_18';
@@ -53,7 +53,6 @@ function InsigniasUsuario({ usuario }) {
 
   return (
     <div className="flex items-center gap-1.5 flex-wrap my-1">
-      {/* 1. Adulto / Menor */}
       <span
         className={`text-[10px] px-2 py-0.5 rounded-md font-medium border ${
           esMenor
@@ -64,7 +63,6 @@ function InsigniasUsuario({ usuario }) {
         {labelEdad}
       </span>
 
-      {/* 2. Verificado */}
       {Boolean(usuario.verificado) && (
         <span
           className="text-[10px] px-2 py-0.5 rounded-md font-medium bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 flex items-center gap-1"
@@ -74,7 +72,6 @@ function InsigniasUsuario({ usuario }) {
         </span>
       )}
 
-      {/* 3. Suscripto Premium */}
       {Boolean(usuario.es_premium) && (
         <span
           className="text-[10px] px-2 py-0.5 rounded-md font-medium bg-amber-500/10 text-amber-300 border border-amber-500/30 flex items-center gap-1"
@@ -87,7 +84,7 @@ function InsigniasUsuario({ usuario }) {
   );
 }
 
-export default function Busqueda({ token, usuario, onIrAlChat }) {
+export default function Busqueda({ token, usuario, onIrAlChat, onVerPerfil }) {
   const [juegosCatalogo, setJuegosCatalogo] = useState([]);
   const [filtros, setFiltros] = useState({
     juego_id: '',
@@ -100,13 +97,20 @@ export default function Busqueda({ token, usuario, onIrAlChat }) {
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState('');
   const [mostrarBloqueados, setMostrarBloqueados] = useState(false);
+  const [destacados, setDestacados] = useState([]);
+  const [perfilDestacadoId, setPerfilDestacadoId] = useState(null);
 
   useEffect(() => {
-    authApi
-      .juegos(token)
-      .then((d) => setJuegosCatalogo(d.juegos))
-      .catch(() => {});
-  }, [token]);
+    const cargarDestacados = async () => {
+      try {
+        const res = await authApi.obtenerPremiumDestacados();
+        if (res.exito) setDestacados(res.usuarios);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    cargarDestacados();
+  }, []);
 
   const actualizarFiltro = (e) => setFiltros({ ...filtros, [e.target.name]: e.target.value });
 
@@ -130,98 +134,136 @@ export default function Busqueda({ token, usuario, onIrAlChat }) {
   if (mostrarBloqueados) return <MisBloqueados token={token} onVolver={() => setMostrarBloqueados(false)} />;
 
   return (
-    <div className="min-h-screen bg-gm-gradient p-4">
-      <div className="max-w-2xl mx-auto">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <h1 className="text-xl font-bold text-white">Buscar jugadores</h1>
-          </div>
-          <div className="flex gap-3">
-            <button
-              onClick={() => setMostrarBloqueados(true)}
-              className="text-white/50 text-sm hover:text-white transition"
-            >
-              Bloqueados
-            </button>
-          </div>
-        </div>
-
-        <div className="bg-card border border-white/10 rounded-2xl p-4 mb-4 shadow-xl">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-3">
-            <Select label="Juego" name="juego_id" value={filtros.juego_id} onChange={actualizarFiltro}>
-              <option value="">Cualquiera</option>
-              {juegosCatalogo.map((j) => (
-                <option key={j.id} value={j.id}>
-                  {j.nombre}
-                </option>
-              ))}
-            </Select>
-            <Select label="Modo" name="modo_juego" value={filtros.modo_juego} onChange={actualizarFiltro}>
-              {MODOS.map((m) => (
-                <option key={m.value} value={m.value}>
-                  {m.label}
-                </option>
-              ))}
-            </Select>
-            <Select label="Rango de edad" name="rango_edad" value={filtros.rango_edad} onChange={actualizarFiltro}>
-              {RANGOS.map((r) => (
-                <option key={r.value} value={r.value}>
-                  {r.label}
-                </option>
-              ))}
-            </Select>
-            <Select label="Plataforma" name="plataforma" value={filtros.plataforma} onChange={actualizarFiltro}>
-              {PLATAFORMAS.map((p) => (
-                <option key={p.value} value={p.value}>
-                  {p.label}
-                </option>
-              ))}
-            </Select>
-            <Select label="Micrófono" name="usa_microfono" value={filtros.usa_microfono} onChange={actualizarFiltro}>
-              <option value="">Cualquiera</option>
-              <option value="true">Con mic</option>
-              <option value="false">Sin mic</option>
-            </Select>
-          </div>
+    <div className="w-full min-h-[calc(100vh-4rem)] bg-gm-gradient p-4 sm:p-6">
+      <div className="max-w-6xl mx-auto space-y-4">
+        {/* Header Superior */}
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl font-bold text-white">Buscar jugadores</h1>
           <button
-            onClick={buscar}
-            disabled={cargando}
-            className="w-full bg-primary hover:bg-primary/90 text-white font-medium rounded-lg py-2 text-sm transition disabled:opacity-50 shadow-md"
+            onClick={() => setMostrarBloqueados(true)}
+            className="text-white/50 text-sm hover:text-white transition"
           >
-            {cargando ? 'Buscando...' : 'Buscar'}
+            Bloqueados
           </button>
         </div>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          
+          {/* COLUMNA IZQUIERDA: Filtros + Destacados */}
+          <div className="lg:col-span-7 space-y-4">
+            {/* Panel de Filtros */}
+            <div className="bg-card border border-white/10 rounded-2xl p-5 shadow-xl">
+              <h2 className="text-white font-semibold text-sm mb-3">Filtros de búsqueda</h2>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
+                <Select label="Juego" name="juego_id" value={filtros.juego_id} onChange={actualizarFiltro}>
+                  <option value="">Cualquiera</option>
+                  {juegosCatalogo.map((j) => (
+                    <option key={j.id} value={j.id}>
+                      {j.nombre}
+                    </option>
+                  ))}
+                </Select>
+                <Select label="Modo" name="modo_juego" value={filtros.modo_juego} onChange={actualizarFiltro}>
+                  {MODOS.map((m) => (
+                    <option key={m.value} value={m.value}>
+                      {m.label}
+                    </option>
+                  ))}
+                </Select>
+                <Select label="Rango de edad" name="rango_edad" value={filtros.rango_edad} onChange={actualizarFiltro}>
+                  {RANGOS.map((r) => (
+                    <option key={r.value} value={r.value}>
+                      {r.label}
+                    </option>
+                  ))}
+                </Select>
+                <Select label="Plataforma" name="plataforma" value={filtros.plataforma} onChange={actualizarFiltro}>
+                  {PLATAFORMAS.map((p) => (
+                    <option key={p.value} value={p.value}>
+                      {p.label}
+                    </option>
+                  ))}
+                </Select>
+                <Select label="Micrófono" name="usa_microfono" value={filtros.usa_microfono} onChange={actualizarFiltro}>
+                  <option value="">Cualquiera</option>
+                  <option value="true">Con mic</option>
+                  <option value="false">Sin mic</option>
+                </Select>
+              </div>
+              <button
+                onClick={buscar}
+                disabled={cargando}
+                className="w-full bg-primary hover:bg-primary/90 text-white font-medium rounded-lg py-2.5 text-sm transition disabled:opacity-50 shadow-md"
+              >
+                {cargando ? 'Buscando...' : 'Buscar jugadores'}
+              </button>
+            </div>
 
-        {/* Banner promocional con botón de pago directo */}
-        {!usuario.es_premium && (
-          <div className="bg-surface/50 border border-amber-500/20 rounded-xl p-3 mb-3 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-md">
-            <p className="text-amber-300/90 text-xs">
-              ⭐ Con Premium podés filtrar por usuarios verificados, reputación mínima y rol en el juego.
-            </p>
-            <div className="shrink-0">
-              <BotonPremium token={token} esPremium={usuario.es_premium} />
+            {/* Sección Destacados Premium */}
+            <SeccionPremiumDestacados 
+              usuarios={destacados} 
+              onVerPerfil={(id) => {
+                if (onVerPerfil) onVerPerfil(id);
+                else setPerfilDestacadoId(id);
+              }} 
+            />
+
+            {/* Banner promocional para usuarios gratuitos */}
+            {!usuario.es_premium && (
+              <div className="bg-surface/50 border border-amber-500/20 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-md">
+                <p className="text-amber-300/90 text-xs leading-relaxed">
+                  ⭐ Con Premium podés filtrar por usuarios verificados, reputación mínima y rol en el juego.
+                </p>
+                <div className="shrink-0">
+                  <BotonPremium token={token} esPremium={usuario.es_premium} />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* COLUMNA DERECHA: Resultados Generales */}
+          <div className="lg:col-span-5 space-y-3">
+            <div className="flex items-center justify-between px-1">
+              <h2 className="text-white font-semibold text-sm">
+                Jugadores encontrados {resultados ? `(${resultados.length})` : ''}
+              </h2>
+            </div>
+
+            {error && <p className="text-repRojo text-sm bg-repRojo/10 rounded-lg px-3 py-2">{error}</p>}
+
+            {/* Lista deslizable de resultados */}
+            <div className="space-y-2.5 max-h-[calc(100vh-210px)] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-white/10">
+              {resultados && resultados.length === 0 && (
+                <div className="bg-card border border-white/5 rounded-xl p-8 text-center">
+                  <p className="text-white/40 text-sm">No se encontraron jugadores con esos filtros.</p>
+                </div>
+              )}
+              {resultados &&
+                resultados.map((u) => (
+                  <CardUsuario
+                    key={u.id}
+                    usuario={u}
+                    usuarioActual={usuario}
+                    token={token}
+                    onBloqueado={handleBloqueado}
+                    onIrAlChat={onIrAlChat}
+                  />
+                ))}
             </div>
           </div>
-        )}
 
-        {error && <p className="text-repRojo text-sm mb-3 bg-repRojo/10 rounded-lg px-3 py-2">{error}</p>}
-        <div className="space-y-2">
-          {resultados && resultados.length === 0 && (
-            <p className="text-white/40 text-sm text-center py-8">No se encontraron jugadores con esos filtros.</p>
-          )}
-          {resultados &&
-            resultados.map((u) => (
-              <CardUsuario
-                key={u.id}
-                usuario={u}
-                usuarioActual={usuario}
-                token={token}
-                onBloqueado={handleBloqueado}
-                onIrAlChat={onIrAlChat}
-              />
-            ))}
         </div>
       </div>
+
+      {/* Modal de perfil al seleccionar un usuario destacado */}
+      {perfilDestacadoId && (
+        <ModalPerfilUsuario
+          token={token}
+          usuarioId={perfilDestacadoId}
+          usuarioActual={usuario}
+          onClose={() => setPerfilDestacadoId(null)}
+          onIrAlChat={onIrAlChat}
+        />
+      )}
     </div>
   );
 }
@@ -283,7 +325,7 @@ function CardUsuario({ usuario, usuarioActual, token, onBloqueado, onIrAlChat })
   return (
     <div className="bg-card border border-white/10 rounded-xl p-3 hover:border-white/20 transition shadow-md">
       <div className="flex items-center gap-3">
-        {/* Avatar del usuario con borde especial si es Premium */}
+        {/* Avatar del usuario con borde dorado si es Premium */}
         <div
           className={`w-11 h-11 rounded-full bg-surface flex items-center justify-center text-white/40 text-lg overflow-hidden shrink-0 cursor-pointer border ${
             usuario.es_premium ? 'border-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.25)]' : 'border-white/10'
@@ -307,7 +349,6 @@ function CardUsuario({ usuario, usuarioActual, token, onBloqueado, onIrAlChat })
             </span>
           </div>
 
-          {/* Insignia combinada: Adulto/Menor + Verificado + Suscripto */}
           <InsigniasUsuario usuario={usuario} />
 
           <div className="flex items-center gap-1.5 text-xs text-white/50">
@@ -426,6 +467,7 @@ function CardUsuario({ usuario, usuarioActual, token, onBloqueado, onIrAlChat })
 function MisBloqueados({ token, onVolver }) {
   const [bloqueados, setBloqueados] = useState(null);
   const [error, setError] = useState('');
+  
   const cargar = async () => {
     try {
       setBloqueados((await authApi.listarBloqueos(token)).bloqueos);

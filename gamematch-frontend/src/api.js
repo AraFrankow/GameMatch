@@ -95,4 +95,10 @@ export const authApi = {
         method: 'POST',
         headers: authHeaders(token),
       }).then(manejarRespuesta),
+
+    obtenerPremiumDestacados: async () => {
+      const res = await fetch(`${API_URL}/api/usuarios/premium-destacados`);
+      if (!res.ok) throw new Error('Error al obtener destacados');
+      return await res.json();
+    },
 };

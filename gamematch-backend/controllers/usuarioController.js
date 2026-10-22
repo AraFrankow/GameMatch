@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { Sequelize } = require('sequelize');
 const { RekognitionClient, DetectFacesCommand } = require('@aws-sdk/client-rekognition');
 const { Usuario, IntegracionRiot, IntegracionSteam } = require('../models');
 
@@ -181,8 +182,32 @@ const verificarCamara = async (req, res) => {
   }
 };
 
+const obtenerPremiumDestacados = async (req, res) => {
+  try {
+    const usuariosPremium = await Usuario.findAll({
+      where: { es_premium: true },
+      limit: 10,
+      attributes: [
+        'id', 
+        'username', 
+        'foto_perfil', 
+        'rango_edad', 
+        'es_premium', 
+        'verificado'
+      ],
+      order: [Sequelize.literal('RAND()')]
+    });
+
+    return res.json({ exito: true, usuarios: usuariosPremium });
+  } catch (error) {
+    console.error('Error al obtener usuarios premium destacados:', error);
+    return res.status(500).json({ exito: false, error: 'Error al obtener destacados' });
+  }
+};
+
 module.exports = { 
   eliminarCuenta,
   obtenerPerfilPorId,
   verificarCamara,
+  obtenerPremiumDestacados,
 };
