@@ -23,6 +23,38 @@ const eliminarCuenta = async (req, res) => {
   }
 };
 
+const safeParseJson = (data) => {
+  if (!data) return [];
+  if (Array.isArray(data)) return data;
+  if (typeof data === 'string') {
+    try {
+      return JSON.parse(data);
+    } catch (e) {
+      return [];
+    }
+  }
+  return [];
+};
+
+const obtenerPortadaSteamHD = (juegoA, juegoB) => {
+  const candidatos = [
+    juegoB?.icono, juegoB?.imagen_url,
+    juegoA?.icono, juegoA?.imagen_url
+  ].filter(Boolean);
+
+  const portadaOficial = candidatos.find(url => url.includes('header.jpg') || url.includes('capsule'));
+  if (portadaOficial) return portadaOficial;
+
+  for (const url of candidatos) {
+    const match = url.match(/\/apps\/(\d+)\//);
+    if (match && match[1]) {
+      return `https://cdn.cloudflare.steamstatic.com/steam/apps/${match[1]}/header.jpg`;
+    }
+  }
+
+  return candidatos[0] || null;
+};
+
 const obtenerPerfilPorId = async (req, res) => {
   try {
     const { id } = req.params;
@@ -41,23 +73,59 @@ const obtenerPerfilPorId = async (req, res) => {
 
     const u = usuarioRaw.toJSON();
 
+    if (u.steam) {
+      u.steam.top_juegos = safeParseJson(u.steam.top_juegos);
+    }
+
     let sinergia_porcentaje = 50;
+    let juegos_en_comun = [];
+
     if (req.usuario && String(req.usuario.id) !== String(id)) {
       const miRiot = await IntegracionRiot.findOne({ where: { usuario_id: req.usuario.id } });
-      const solicitante = { riot: miRiot ? miRiot.toJSON() : null };
-      sinergia_porcentaje = calcularSinergiaDuo(solicitante, { riot: u.riot, reputacion_porcentaje: u.reputacion_porcentaje });
+      const miSteam = await IntegracionSteam.findOne({ where: { usuario_id: req.usuario.id } });
+
+      const solicitante = {
+        riot: miRiot ? miRiot.toJSON() : null,
+        steam: miSteam ? miSteam.toJSON() : null
+      };
+
+      sinergia_porcentaje = calcularSinergiaDuo(solicitante, {
+        riot: u.riot,
+        steam: u.steam,
+        reputacion_porcentaje: u.reputacion_porcentaje
+      });
+
+      const misJuegosSteam = safeParseJson(miSteam?.top_juegos);
+      const susJuegosSteam = u.steam?.top_juegos || [];
+
+      misJuegosSteam.forEach(miJuego => {
+        const coincidencia = susJuegosSteam.find(
+          sj => sj.nombre?.toLowerCase().trim() === miJuego.nombre?.toLowerCase().trim()
+        );
+
+        if (coincidencia) {
+          juegos_en_comun.push({
+            nombre: miJuego.nombre,
+            icono: obtenerPortadaSteamHD(miJuego, coincidencia),
+            mis_horas: miJuego.horas,
+            sus_horas: coincidencia.horas
+          });
+        }
+      });
     }
 
     const usuario = {
       ...u,
       es_premium: Boolean(u.es_premium || u.esPremium || Number(u.es_premium) === 1),
       verificado: Boolean(u.verificado || u.estaVerificado),
-      sinergia_porcentaje
+      sinergia_porcentaje,
+      juegos_en_comun
     };
 
     return res.json({
       exito: true,
       usuario,
+      juegos_en_comun,
       riot: u.riot || null,
       steam: u.steam || null
     });

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { authApi } from '../api';
 import TarjetaRiot from './TarjetaRiot';
+import TarjetaSteam from './TarjetaSteam';
 import BadgeSinergia from './BadgeSinergia';
 
 const ESTADO_COLOR = {
@@ -65,6 +66,8 @@ export default function ModalPerfilUsuario({ token, usuarioId, usuarioActual, on
   const [perfil, setPerfil] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
+  const [pestana, setPestana] = useState('riot');
+
   const esUsuarioActualPremium = Boolean(usuarioActual?.es_premium);
 
   useEffect(() => {
@@ -82,6 +85,9 @@ export default function ModalPerfilUsuario({ token, usuarioId, usuarioActual, on
           riot,
           steam,
         });
+
+        if (!riot && steam) setPestana('steam');
+        else setPestana('riot');
       })
       .catch((err) => setError(err.message))
       .finally(() => setCargando(false));
@@ -105,7 +111,6 @@ export default function ModalPerfilUsuario({ token, usuarioId, usuarioActual, on
   if (!usuarioId) return null;
 
   const esPremium = perfil ? Boolean(perfil.es_premium || perfil.esPremium || Number(perfil.es_premium) === 1) : false;
-  const riot = perfil?.riot;
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -151,8 +156,50 @@ export default function ModalPerfilUsuario({ token, usuarioId, usuarioActual, on
                 <BadgeSinergia porcentaje={perfil.sinergia_porcentaje} />
               )}
 
-              {/* INTEGRACIÓN RIOT GAMES */}
-              {riot && <TarjetaRiot riot={riot} />}
+              {/* PESTAÑAS Y PLATAFORMAS (RIOT / STEAM) */}
+              <div className="w-full space-y-3 pt-2">
+                {(perfil.riot || perfil.steam) && (
+                  <div className="flex gap-2 w-full bg-surface/50 p-1 rounded-xl border border-white/5">
+                    {perfil.riot && (
+                      <button
+                        onClick={() => setPestana('riot')}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                          pestana === 'riot'
+                            ? 'bg-primary text-white shadow-md'
+                            : 'text-white/50 hover:text-white'
+                        }`}
+                      >
+                        <span>⚔️</span> League of Legends
+                      </button>
+                    )}
+
+                    {perfil.steam && (
+                      <button
+                        onClick={() => setPestana('steam')}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                          pestana === 'steam'
+                            ? 'bg-[#66c0f4]/20 border border-[#66c0f4]/40 text-[#66c0f4] shadow-md'
+                            : 'text-white/50 hover:text-white'
+                        }`}
+                      >
+                        <span>🎮</span> Steam
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* TARJETA SEGÚN PESTAÑA ACTIVA */}
+                {pestana === 'riot' && perfil.riot && <TarjetaRiot riot={perfil.riot} />}
+                {pestana === 'steam' && perfil.steam && (
+                  <TarjetaSteam steam={perfil.steam} juegosEnComun={perfil.juegos_en_comun || []} />
+                )}
+
+                {!perfil.riot && !perfil.steam && (
+                  <div className="bg-black/20 border border-white/5 p-3 rounded-xl text-center text-xs text-white/40">
+                    Sin cuentas de juego vinculadas
+                  </div>
+                )}
+              </div>
             </div>
 
             {usuarioActual?.id !== perfil.id && (
