@@ -504,7 +504,15 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
                   )}
 
                   {/* TARJETA DETALLADA DE ESTADÍSTICAS LOL */}
-                  {datosRiot && <TarjetaRiot riot={perfil.riot} token={token} esMiPerfil={true} onActualizar={cargarPerfil}/>}
+                  {datosRiot && (
+                    <TarjetaRiot
+                      riot={perfil?.riot || datosRiot}
+                      token={token}
+                      esMiPerfil={true}
+                      esUsuarioPremium={esPremium}
+                      onActualizar={cargarPerfil}
+                    />
+                  )}
                 </div>
 
                 {/* Steam */}

@@ -29,11 +29,35 @@ const IntegracionRiot = sequelize.define('IntegracionRiot', {
     defaultValue: []
   },
 
+  puuid: {
+    type: DataTypes.VIRTUAL,
+    get() {
+      return this.riot_puuid;
+    },
+    set(val) {
+      this.setDataValue('riot_puuid', val);
+    }
+  },
+
+  kda_promedio: {
+    type: DataTypes.FLOAT,
+    defaultValue: 0.0,
+  },
+  stats_campeones: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
+  ultimas_partidas: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
+
   // Valorant
   rango_valorant: { type: DataTypes.STRING(50), allowNull: true },
 
   vinculado_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
-  ultima_sincronizacion: { type: DataTypes.DATE, allowNull: true }
+  ultima_sincronizacion: { type: DataTypes.DATE, allowNull: true },
+  
 }, { 
   tableName: 'integraciones_riot', 
   timestamps: false 

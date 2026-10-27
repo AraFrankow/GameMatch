@@ -54,7 +54,7 @@ const listarMisSalas = async (req, res) => {
             model: Usuario, 
             as: 'usuario', 
             // ATRIBUTOS DE VERIFICACIÓN
-            attributes: ['id', 'username', 'foto_perfil', 'estado', 'verificado', 'edad_estimada', 'rango_edad'] 
+            attributes: ['id', 'username', 'foto_perfil', 'estado', 'verificado', 'rango_edad'] 
           }] 
         }] 
       }],

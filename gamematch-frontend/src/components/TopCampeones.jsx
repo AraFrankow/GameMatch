@@ -35,21 +35,44 @@ function CampeonItem({ championId, level, points }) {
 }
 
 export default function TopCampeones({ campeones }) {
-  if (!campeones || campeones.length === 0) return null;
+  let lista = campeones;
+
+  if (typeof lista === 'string') {
+    try {
+      lista = JSON.parse(lista);
+    } catch (e) {
+      lista = [];
+    }
+  }
+
+  if (typeof lista === 'string') {
+    try {
+      lista = JSON.parse(lista);
+    } catch (e) {
+      lista = [];
+    }
+  }
+
+  if (!Array.isArray(lista) || lista.length === 0) {
+    return null;
+  }
 
   return (
-    <div className="space-y-1.5 pt-2 border-t border-white/5">
-      <p className="text-[10px] font-bold uppercase tracking-wider text-amber-400/80">
-        Mains / Campeones Destacados
+    <div className="pt-2 border-t border-white/5 space-y-1 text-left">
+      <p className="text-[10px] font-semibold text-white/50 uppercase tracking-wider">
+        Maestrías Principales
       </p>
-      <div className="grid grid-cols-3 gap-2">
-        {campeones.map((c, index) => (
-          <CampeonItem
+      <div className="flex gap-2">
+        {lista.map((c, index) => (
+          <div
             key={c.championId || index}
-            championId={c.championId}
-            level={c.championLevel}
-            points={c.championPoints}
-          />
+            className="bg-black/30 border border-white/10 px-2 py-1 rounded text-xs flex items-center gap-1.5"
+          >
+            <span className="font-bold text-amber-300">Niv. {c.championLevel}</span>
+            <span className="text-white/60 font-mono text-[10px]">
+              ({Math.round(c.championPoints / 1000)}k pts)
+            </span>
+          </div>
         ))}
       </div>
     </div>

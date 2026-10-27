@@ -1,6 +1,7 @@
 const { IntegracionRiot } = require('../models');
 const axios = require('axios');
 const { calcularSinergiaDuo } = require('../utils/sinergia');
+const { obtenerStatsYPartidas } = require('../utils/riotService');
 
 const CLUSTER_POR_REGION = {
   la1: 'americas', lan: 'americas',
@@ -54,25 +55,69 @@ async function obtenerTopCampeones(puuid, plataforma, apiKey) {
   }
 }
 
+const obtenerRolMasJugado = async (puuid, cluster, apiKey) => {
+  try {
+    const urlMatchIds = `https://${cluster}.api.riotgames.com/lol/match/v5/matches/by-puuid/${puuid}/ids?start=0&count=10`;
+    const resIds = await fetch(urlMatchIds, { headers: { 'X-Riot-Token': apiKey } });
+    if (!resIds.ok) return null;
+
+    const matchIds = await resIds.json();
+    if (!matchIds || matchIds.length === 0) return null;
+
+    const conteoRoles = {};
+
+    for (const matchId of matchIds.slice(0, 5)) {
+      const urlMatch = `https://${cluster}.api.riotgames.com/lol/match/v5/matches/${matchId}`;
+      const resMatch = await fetch(urlMatch, { headers: { 'X-Riot-Token': apiKey } });
+      if (!resMatch.ok) continue;
+
+      const matchData = await resMatch.json();
+      const jugador = matchData.info?.participants?.find((p) => p.puuid === puuid);
+
+      if (jugador && jugador.individualPosition) {
+        const pos = MAPEO_ROLES[jugador.individualPosition.toUpperCase()] || jugador.individualPosition;
+        if (pos && pos !== 'Invalid') {
+          conteoRoles[pos] = (conteoRoles[pos] || 0) + 1;
+        }
+      }
+    }
+
+    let rolDominante = null;
+    let maxConteo = 0;
+    for (const [rol, conteo] of Object.entries(conteoRoles)) {
+      if (conteo > maxConteo) {
+        maxConteo = conteo;
+        rolDominante = rol;
+      }
+    }
+
+    return rolDominante;
+  } catch (err) {
+    console.error('[Riot Debug] Error calculando rol desde historial:', err.message);
+    return null;
+  }
+};
+
 const vincularRiot = async (req, res) => {
   try {
     const { game_name, tag_line, region, posicion_principal } = req.body;
-    const usuario_id = req.usuario.id;
+    const usuario_id = req.usuario?.id || req.user?.id;
     const apiKey = process.env.RIOT_API_KEY;
+
+    if (!usuario_id) {
+      return res.status(401).json({ error: 'Usuario no autenticado' });
+    }
 
     if (!game_name || !tag_line || !region) {
       return res.status(400).json({ error: 'game_name, tag_line y region son obligatorios' });
     }
 
     const regionClean = region.trim().toLowerCase();
-    const cluster = CLUSTER_POR_REGION[regionClean];
-    const plataforma = PLATAFORMA_POR_REGION[regionClean];
+    const cluster = CLUSTER_POR_REGION[regionClean] || 'americas';
+    const plataforma = PLATAFORMA_POR_REGION[regionClean] || 'la2';
 
-    const urlAccount = `https://${cluster}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(game_name)}/${encodeURIComponent(tag_line)}`;
-    const resAccount = await fetch(urlAccount, { headers: { 'X-Riot-Token': apiKey } });
-
-    if (!resAccount.ok) return res.status(404).json({ error: 'No se encontró la cuenta de Riot' });
-    const { puuid } = await resAccount.json();
+    const datosRiotAPI = await obtenerStatsYPartidas(game_name, tag_line, regionClean);
+    const puuid = datosRiotAPI.puuid;
 
     let nivel_invocador = null;
     let rango_lol = 'UNRANKED';
@@ -114,7 +159,7 @@ const vincularRiot = async (req, res) => {
       rolFinal = await obtenerRolMasJugado(puuid, cluster, apiKey);
     }
 
-    const integracion = await IntegracionRiot.create({
+    const [registro] = await IntegracionRiot.upsert({
       usuario_id,
       riot_puuid: puuid,
       riot_username: `${game_name}#${tag_line}`,
@@ -127,19 +172,22 @@ const vincularRiot = async (req, res) => {
       lol_wins,
       lol_losses,
       lol_posicion_principal: rolFinal,
-      top_champions,
+      top_champions: top_champions,
+      kda_promedio: datosRiotAPI.kdaPromedio,
+      stats_campeones: JSON.stringify(datosRiotAPI.statsCampeones),
+      ultimas_partidas: JSON.stringify(datosRiotAPI.ultimasPartidas),
       ultima_sincronizacion: new Date(),
     });
 
-    return res.status(201).json({
+    return res.status(200).json({
       exito: true,
-      integracion,
+      integracion: registro,
       rolDetectado: Boolean(rolFinal),
       mensaje: 'Cuenta de Riot vinculada correctamente.',
     });
   } catch (err) {
     console.error('Error en vincularRiot:', err);
-    return res.status(500).json({ error: 'Error al vincular cuenta de Riot' });
+    return res.status(500).json({ error: err.message || 'Error al vincular cuenta de Riot' });
   }
 };
 
@@ -151,49 +199,6 @@ const desvincularRiot = async (req, res) => {
   } catch (err) {
     console.error('Error en desvincular Riot:', err);
     return res.status(500).json({ error: 'Error al desvincular la cuenta de Riot' });
-  }
-};
-
-const obtenerRolMasJugado = async (puuid, cluster, apiKey) => {
-  try {
-    const urlMatchIds = `https://${cluster}.api.riotgames.com/lol/match/v5/matches/by-puuid/${puuid}/ids?start=0&count=10`;
-    const resIds = await fetch(urlMatchIds, { headers: { 'X-Riot-Token': apiKey } });
-    if (!resIds.ok) return null;
-
-    const matchIds = await resIds.json();
-    if (!matchIds || matchIds.length === 0) return null;
-
-    const conteoRoles = {};
-
-    for (const matchId of matchIds.slice(0, 5)) {
-      const urlMatch = `https://${cluster}.api.riotgames.com/lol/match/v5/matches/${matchId}`;
-      const resMatch = await fetch(urlMatch, { headers: { 'X-Riot-Token': apiKey } });
-      if (!resMatch.ok) continue;
-
-      const matchData = await resMatch.json();
-      const jugador = matchData.info?.participants?.find((p) => p.puuid === puuid);
-
-      if (jugador && jugador.individualPosition) {
-        const pos = MAPEO_ROLES[jugador.individualPosition.toUpperCase()] || jugador.individualPosition;
-        if (pos && pos !== 'Invalid') {
-          conteoRoles[pos] = (conteoRoles[pos] || 0) + 1;
-        }
-      }
-    }
-
-    let rolDominante = null;
-    let maxConteo = 0;
-    for (const [rol, conteo] of Object.entries(conteoRoles)) {
-      if (conteo > maxConteo) {
-        maxConteo = conteo;
-        rolDominante = rol;
-      }
-    }
-
-    return rolDominante;
-  } catch (err) {
-    console.error('[Riot Debug] Error calculando rol desde historial:', err.message);
-    return null;
   }
 };
 

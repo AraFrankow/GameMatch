@@ -4,15 +4,67 @@ const CONFIG_ROLES = {
   TOP: { label: 'TOP', color: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30', icono: '🛡️' },
   JUNGLE: { label: 'JUNGLA', color: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30', icono: '🌿' },
   MID: { label: 'MID', color: 'bg-purple-500/20 text-purple-300 border-purple-500/30', icono: '⚡' },
+  MIDDLE: { label: 'MID', color: 'bg-purple-500/20 text-purple-300 border-purple-500/30', icono: '⚡' },
   ADC: { label: 'ADC', color: 'bg-amber-500/20 text-amber-300 border-amber-500/30', icono: '🎯' },
+  BOT: { label: 'ADC', color: 'bg-amber-500/20 text-amber-300 border-amber-500/30', icono: '🎯' },
+  BOTTOM: { label: 'ADC', color: 'bg-amber-500/20 text-amber-300 border-amber-500/30', icono: '🎯' },
   SUPPORT: { label: 'SUPPORT', color: 'bg-rose-500/20 text-rose-300 border-rose-500/30', icono: '💚' },
+  UTILITY: { label: 'SUPPORT', color: 'bg-rose-500/20 text-rose-300 border-rose-500/30', icono: '💚' },
+  ARAM: { label: 'ARAM', color: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30', icono: '❄️' },
+  ARENA: { label: 'ARENA', color: 'bg-amber-500/20 text-amber-300 border-amber-500/30', icono: '⚔️' },
 };
 
+function parsearTopJuegos(topJuegos) {
+  if (!topJuegos) return [];
+  if (Array.isArray(topJuegos)) return topJuegos;
+  try {
+    const parsed = JSON.parse(topJuegos);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
 export default function TarjetaJugador({ jugador, onVerPerfil, onBloquear, onReportar }) {
-  const esPremium = Boolean(jugador.es_premium);
-  const rolInfo = jugador.riot?.lol_posicion_principal
-    ? CONFIG_ROLES[jugador.riot.lol_posicion_principal.toUpperCase()]
+  if (!jugador) return null;
+
+  const esPremium = Boolean(
+    jugador.es_premium === true ||
+      jugador.es_premium === 1 ||
+      jugador.es_premium === '1' ||
+      jugador.es_premium === 'true'
+  );
+
+  const datosRiot = jugador.riot || jugador.integracionRiot || jugador.IntegracionRiot || null;
+  const datosSteam = jugador.steam || jugador.integracionSteam || jugador.IntegracionSteam || null;
+
+  const tieneRiot = Boolean(datosRiot);
+  const tieneSteam = Boolean(datosSteam);
+
+  const rawPosicion = datosRiot?.lol_posicion_principal
+    ? datosRiot.lol_posicion_principal.toUpperCase()
     : null;
+  const rolInfo = rawPosicion ? CONFIG_ROLES[rawPosicion] : null;
+
+  const wins = datosRiot?.lol_wins || 0;
+  const losses = datosRiot?.lol_losses || 0;
+  const totalPartidas = wins + losses;
+
+  const winrate = jugador.lol_winrate !== undefined && jugador.lol_winrate !== null
+    ? jugador.lol_winrate
+    : totalPartidas > 0
+    ? Math.round((wins / totalPartidas) * 100)
+    : 0;
+
+  const topJuegosSteam = tieneSteam ? parsearTopJuegos(datosSteam.top_juegos) : [];
+
+  const cantidadJuegosSteam = datosSteam?.total_juegos > 0
+    ? datosSteam.total_juegos
+    : topJuegosSteam.length > 0
+    ? topJuegosSteam.length
+    : Array.isArray(jugador.juegos)
+    ? jugador.juegos.length
+    : 0;
 
   return (
     <div
@@ -22,7 +74,7 @@ export default function TarjetaJugador({ jugador, onVerPerfil, onBloquear, onRep
           : 'border-white/10 hover:border-primary/50 hover:shadow-[0_0_20px_rgba(147,51,234,0.15)]'
       }`}
     >
-      {/* INSIGNIA SUPERIOR DE PREMIUM / DESTACADO */}
+      {/* INSIGNIA SUPERIOR DE PREMIUM */}
       {esPremium && (
         <div className="absolute -top-2.5 right-4 bg-gradient-to-r from-amber-500 to-yellow-300 text-black font-extrabold text-[9px] uppercase px-2 py-0.5 rounded-full shadow-md tracking-wider flex items-center gap-1">
           <span>⭐</span> Premium
@@ -33,7 +85,6 @@ export default function TarjetaJugador({ jugador, onVerPerfil, onBloquear, onRep
         {/* CABECERA: AVATAR, NOMBRE Y SINERGIA */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            {/* AVATAR CON GLOW */}
             <div
               className={`relative w-12 h-12 rounded-full overflow-hidden shrink-0 border-2 transition duration-300 ${
                 esPremium
@@ -54,7 +105,6 @@ export default function TarjetaJugador({ jugador, onVerPerfil, onBloquear, onRep
               )}
             </div>
 
-            {/* NOMBRE Y RANGO EDAD */}
             <div className="min-w-0">
               <h4 className="text-sm font-bold text-white truncate group-hover:text-primary-light transition-colors">
                 {jugador.username}
@@ -66,12 +116,10 @@ export default function TarjetaJugador({ jugador, onVerPerfil, onBloquear, onRep
           </div>
 
           <div className="flex flex-col items-end gap-1">
-            {/* Porcentaje Global */}
             <span className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-bold text-xs px-2 py-1 rounded-lg">
               🤝 {typeof jugador.sinergia === 'object' ? jugador.sinergia?.global : (jugador.sinergia_porcentaje ?? 50)}% Sinergia
             </span>
 
-            {/* Sub-sinergias */}
             <div className="flex items-center gap-1">
               {jugador.sinergia_riot !== null && jugador.sinergia_riot !== undefined && (
                 <span className="text-[10px] bg-red-500/10 border border-red-500/20 text-red-400 px-1.5 py-0.5 rounded font-mono">
@@ -88,47 +136,96 @@ export default function TarjetaJugador({ jugador, onVerPerfil, onBloquear, onRep
           </div>
         </div>
 
-        {/* DATOS DE RIOT / LOL (RANGOS Y ROLES) */}
-        {jugador.riot ? (
-          <div className="bg-black/30 border border-white/5 rounded-xl p-2.5 space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <span className="font-bold text-amber-400 truncate">
-                  {jugador.riot.rango_lol || 'UNRANKED'}
-                </span>
-                {jugador.riot.lol_lp > 0 && (
+        {/* CONTENEDOR DE CUENTAS VINCULADAS */}
+        <div className="space-y-2">
+          {/* 1. BLOQUE DE RIOT */}
+          {tieneRiot && (
+            <div className="bg-black/30 border border-white/5 rounded-xl p-2.5 space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="text-[10px] text-white/40">⚔️</span>
+                  <span className="font-bold text-amber-400 truncate">
+                    {datosRiot.rango_lol || 'UNRANKED'}
+                  </span>
+                  {datosRiot.lol_lp !== undefined && datosRiot.lol_lp > 0 && (
+                    <span className="text-[10px] text-white/40 font-mono">
+                      ({datosRiot.lol_lp} LP)
+                    </span>
+                  )}
+                </div>
+
+                {rolInfo ? (
+                  <span
+                    className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md border flex items-center gap-1 ${rolInfo.color}`}
+                  >
+                    <span>{rolInfo.icono}</span>
+                    <span>{rolInfo.label}</span>
+                  </span>
+                ) : rawPosicion ? (
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md border bg-white/10 text-white/80 border-white/20">
+                    {rawPosicion}
+                  </span>
+                ) : null}
+              </div>
+
+              {winrate > 0 && (
+                <div className="flex items-center justify-between text-[10px] pt-1 border-t border-white/5 text-white/60">
+                  <span>Rendimiento SoloQ</span>
+                  <span className="text-emerald-400 font-bold">{winrate}% WR</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 2. BLOQUE DE STEAM */}
+          {tieneSteam && (
+            <div className="bg-[#66c0f4]/10 border border-[#66c0f4]/20 rounded-xl p-2.5 space-y-1">
+              <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="text-[11px]">🎮</span>
+                  <span className="font-bold text-[#66c0f4] truncate">
+                    {datosSteam.steam_username || 'Cuenta Steam'}
+                  </span>
+                </div>
+
+                {datosSteam.jugando_ahora ? (
+                  <span className="text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-1.5 py-0.5 rounded font-medium flex items-center gap-1 truncate max-w-[120px]">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    {datosSteam.jugando_ahora}
+                  </span>
+                ) : (
                   <span className="text-[10px] text-white/40 font-mono">
-                    ({jugador.riot.lol_lp} LP)
+                    {cantidadJuegosSteam} {cantidadJuegosSteam === 1 ? 'juego' : 'juegos'}
                   </span>
                 )}
               </div>
 
-              {/* ROL PRINCIPAL */}
-              {rolInfo && (
-                <span
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded-md border flex items-center gap-1 ${rolInfo.color}`}
-                >
-                  <span>{rolInfo.icono}</span>
-                  <span>{rolInfo.label}</span>
-                </span>
+              {/* TOP JUEGOS O DESTACADOS DE STEAM */}
+              {topJuegosSteam.length > 0 && (
+                <div className="flex items-center gap-1 flex-wrap pt-1 border-t border-white/5">
+                  {topJuegosSteam.slice(0, 3).map((juego, idx) => {
+                    const nombreJuego = typeof juego === 'string' ? juego : juego.name || juego.nombre;
+                    return (
+                      <span
+                        key={idx}
+                        className="text-[9px] bg-white/5 text-white/70 px-1.5 py-0.2 rounded border border-white/5 truncate max-w-[110px]"
+                      >
+                        {nombreJuego}
+                      </span>
+                    );
+                  })}
+                </div>
               )}
             </div>
+          )}
 
-            {/* WINRATE Y PARTIDAS */}
-            {jugador.lol_winrate > 0 && (
-              <div className="flex items-center justify-between text-[10px] pt-1 border-t border-white/5 text-white/60">
-                <span>Rendimiento SoloQ</span>
-                <span className="text-emerald-400 font-bold">
-                  {jugador.lol_winrate}% WR
-                </span>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="bg-black/20 border border-white/5 rounded-xl p-2.5 text-[11px] text-white/40 text-center">
-            Sin cuenta de Riot vinculada
-          </div>
-        )}
+          {/* 3. CARTEL GENÉRICO SI NO TIENE NINGUNA DE LAS DOS CUENTAS */}
+          {!tieneRiot && !tieneSteam && (
+            <div className="bg-black/20 border border-white/5 rounded-xl p-2.5 text-[11px] text-white/40 text-center flex items-center justify-center gap-1.5">
+              <span>🎮</span> Sin cuentas de juego vinculadas
+            </div>
+          )}
+        </div>
       </div>
 
       {/* BOTONES DE ACCIÓN */}

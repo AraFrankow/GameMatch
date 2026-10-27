@@ -68,7 +68,12 @@ export default function ModalPerfilUsuario({ token, usuarioId, usuarioActual, on
   const [error, setError] = useState('');
   const [pestana, setPestana] = useState('riot');
 
-  const esUsuarioActualPremium = Boolean(usuarioActual?.es_premium);
+  const esUsuarioActualPremium = Boolean(
+    usuarioActual?.es_premium === true ||
+      usuarioActual?.es_premium === 1 ||
+      usuarioActual?.es_premium === '1' ||
+      usuarioActual?.es_premium === 'true'
+  );
 
   useEffect(() => {
     if (!usuarioId) return;
@@ -120,7 +125,8 @@ export default function ModalPerfilUsuario({ token, usuarioId, usuarioActual, on
 
   if (!usuarioId) return null;
 
-  const esPremium = perfil ? Boolean(perfil.es_premium || perfil.esPremium || Number(perfil.es_premium) === 1) : false;
+  const esPerfilMio = Boolean(usuarioActual?.id && perfil?.id && usuarioActual.id === perfil.id);
+  const esPremiumPerfil = perfil ? Boolean(perfil.es_premium || perfil.esPremium || Number(perfil.es_premium) === 1) : false;
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -139,7 +145,7 @@ export default function ModalPerfilUsuario({ token, usuarioId, usuarioActual, on
           <div className="flex flex-col items-center text-center space-y-3">
             <div
               className={`w-20 h-20 rounded-full bg-surface overflow-hidden flex items-center justify-center text-2xl font-bold text-white border-2 ${
-                esPremium ? 'border-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.3)]' : 'border-primary'
+                esPremiumPerfil ? 'border-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.3)]' : 'border-primary'
               }`}
             >
               {perfil.foto_perfil ? (
@@ -199,8 +205,16 @@ export default function ModalPerfilUsuario({ token, usuarioId, usuarioActual, on
                   </div>
                 )}
 
-                {/* TARJETA SEGÚN PESTAÑA ACTIVA */}
-                {pestana === 'riot' && perfil.riot && <TarjetaRiot riot={perfil.riot} />}
+                {/* TARJETA SEGÚN PESTAÑA ACTIVA PASANDO LOS PERMISOS */}
+                {pestana === 'riot' && perfil.riot && (
+                  <TarjetaRiot
+                    riot={perfil.riot}
+                    token={token}
+                    esMiPerfil={esPerfilMio}
+                    esUsuarioPremium={esUsuarioActualPremium}
+                    usuarioLogueado={usuarioActual}
+                  />
+                )}
                 {pestana === 'steam' && perfil.steam && (
                   <TarjetaSteam steam={perfil.steam} juegosEnComun={perfil.juegos_en_comun || []} />
                 )}
