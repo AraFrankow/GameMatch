@@ -80,8 +80,18 @@ export default function ModalPerfilUsuario({ token, usuarioId, usuarioActual, on
         const riot = data.riot || u.riot || u.IntegracionRiot || null;
         const steam = data.steam || u.steam || u.IntegracionSteam || null;
 
+        const sinergiaGlobal =
+          typeof u.sinergia_porcentaje === 'object' && u.sinergia_porcentaje !== null
+            ? u.sinergia_porcentaje.global
+            : typeof u.sinergia === 'object' && u.sinergia !== null
+            ? u.sinergia.global
+            : typeof data.sinergia === 'object' && data.sinergia !== null
+            ? data.sinergia.global
+            : (u.sinergia_porcentaje ?? u.sinergia ?? 50);
+
         setPerfil({
           ...u,
+          sinergia_porcentaje: sinergiaGlobal,
           riot,
           steam,
         });
@@ -152,6 +162,7 @@ export default function ModalPerfilUsuario({ token, usuarioId, usuarioActual, on
                 )}
               </div>
 
+              {/* BADGE DE SINERGIA CON VALOR NUMÉRICO */}
               {esUsuarioActualPremium && perfil && perfil.sinergia_porcentaje !== undefined && (
                 <BadgeSinergia porcentaje={perfil.sinergia_porcentaje} />
               )}

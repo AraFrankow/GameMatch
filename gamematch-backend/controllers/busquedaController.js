@@ -65,17 +65,31 @@ const buscarCompaneros = async (req, res) => {
     const reputacionesMap = await calcularReputacionBulk(ids);
 
     const miRiot = await IntegracionRiot.findOne({ where: { usuario_id: usuarioSolicitante.id } });
+    const miSteam = await IntegracionSteam.findOne({ where: { usuario_id: usuarioSolicitante.id } });
+
     const perfilSolicitante = {
       ...usuarioSolicitante.toJSON(),
       riot: miRiot ? miRiot.toJSON() : null,
+      steam: miSteam ? miSteam.toJSON() : null,
     };
 
     let resultados = candidatosRaw.map((u) => {
       const plano = u.toJSON();
       const rep = reputacionesMap.get(u.id) || { porcentaje: null };
-      
+
       plano.reputacion_porcentaje = rep.porcentaje;
-      plano.sinergia_porcentaje = calcularSinergiaDuo(perfilSolicitante, plano);
+
+      const sinergiaObj = calcularSinergiaDuo(perfilSolicitante, plano);
+
+      const valorGlobal =
+        typeof sinergiaObj === 'object' && sinergiaObj !== null
+          ? sinergiaObj.global
+          : Number(sinergiaObj) || 50;
+
+      plano.sinergia = sinergiaObj;
+      plano.sinergia_porcentaje = valorGlobal;
+      plano.sinergia_riot = sinergiaObj?.riot ?? null;
+      plano.sinergia_steam = sinergiaObj?.steam ?? null;
 
       let winrate = 0;
       if (plano.riot && (plano.riot.lol_wins > 0 || plano.riot.lol_losses > 0)) {

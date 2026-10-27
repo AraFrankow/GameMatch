@@ -65,16 +65,27 @@ export default function TarjetaJugador({ jugador, onVerPerfil, onBloquear, onRep
             </div>
           </div>
 
-          {/* BADGE DE SINERGIA ESTILIZADO */}
-          {jugador.sinergia_porcentaje !== undefined && (
-            <div
-              className="bg-primary/20 border border-primary/40 text-primary font-extrabold text-[11px] px-2.5 py-1 rounded-full shrink-0 flex items-center gap-1 shadow-inner"
-              title="Afinidad de compatibilidad"
-            >
-              <span className="animate-pulse">⚡</span>
-              <span>{jugador.sinergia_porcentaje}%</span>
+          <div className="flex flex-col items-end gap-1">
+            {/* Porcentaje Global */}
+            <span className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-bold text-xs px-2 py-1 rounded-lg">
+              🤝 {typeof jugador.sinergia === 'object' ? jugador.sinergia?.global : (jugador.sinergia_porcentaje ?? 50)}% Sinergia
+            </span>
+
+            {/* Sub-sinergias */}
+            <div className="flex items-center gap-1">
+              {jugador.sinergia_riot !== null && jugador.sinergia_riot !== undefined && (
+                <span className="text-[10px] bg-red-500/10 border border-red-500/20 text-red-400 px-1.5 py-0.5 rounded font-mono">
+                  LoL: {jugador.sinergia_riot}%
+                </span>
+              )}
+
+              {jugador.sinergia_steam !== null && jugador.sinergia_steam !== undefined && (
+                <span className="text-[10px] bg-blue-500/10 border border-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded font-mono">
+                  Steam: {jugador.sinergia_steam}%
+                </span>
+              )}
             </div>
-          )}
+          </div>
         </div>
 
         {/* DATOS DE RIOT / LOL (RANGOS Y ROLES) */}

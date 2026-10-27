@@ -139,6 +139,11 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
     }
   };
 
+  const handleVincularSteamOficial = () => {
+    const usuarioId = usuario?.id || perfil?.id;
+    window.location.href = `http://localhost:3000/api/integraciones/steam/auth?usuario_id=${usuarioId}`;
+  };
+
   const handleDesvincular = async (tipo) => {
     if (!window.confirm(`¿Querés desvincular tu cuenta de ${tipo.toUpperCase()}?`)) return;
     try {
@@ -534,24 +539,49 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
                     )}
                   </div>
 
+                  {/* OPCIONES DE VINCULACIÓN */}
                   {mostrarSteamInput && !datosSteam && (
-                    <form onSubmit={handleVincularSteam} className="pt-2 border-t border-white/5 space-y-2">
-                      <input
-                        type="text"
-                        placeholder="SteamID64 (ej: 76561198860923712)"
-                        value={steamIdInput}
-                        onChange={(e) => setSteamIdInput(e.target.value)}
-                        className="w-full bg-surface border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white outline-none focus:border-primary"
-                        required
-                      />
+                    <div className="pt-3 border-t border-white/5 space-y-3">
+                      {/* BOTÓN OFICIAL CON OPENID */}
                       <button
-                        type="submit"
-                        disabled={cargandoIntegracion}
-                        className="w-full bg-primary hover:bg-primary/90 text-white text-xs py-1.5 rounded-lg font-medium transition disabled:opacity-50"
+                        type="button"
+                        onClick={handleVincularSteamOficial}
+                        className="w-full bg-[#171a21] hover:bg-[#2a475e] text-white border border-[#66c0f4]/40 text-xs py-2.5 px-4 rounded-xl font-bold transition flex items-center justify-center gap-2.5 shadow-md group"
                       >
-                        {cargandoIntegracion ? 'Importando juegos...' : 'Vincular SteamID'}
+                        <svg 
+                          className="w-4 h-4 fill-current text-[#66c0f4] shrink-0" 
+                          viewBox="0 0 24 24"
+                        >
+                          <path d="M11.979 0C5.678 0 .511 4.86.022 11.037l6.432 2.658c.545-.371 1.203-.59 1.912-.59.063 0 .125.004.188.006l2.861-4.142V8.91c0-2.495 2.028-4.524 4.524-4.524 2.494 0 4.524 2.029 4.524 4.524s-2.03 4.525-4.524 4.525c-.103 0-.204-.007-.306-.013l-4.032 2.915c.002.051.007.102.007.154 0 1.841-1.493 3.334-3.334 3.334-1.503 0-2.771-.997-3.187-2.361L.387 15.11C1.821 20.285 6.462 24 11.979 24c6.627 0 12-5.373 12-12s-5.373-12-12-12zM8.366 17.15c0 .002 0 .004 0 .006a1.53 1.53 0 0 1-1.529 1.529 1.53 1.53 0 0 1 1.529-1.529c.321 0 .618.101.865.271l-1.391.575a.384.384 0 0 0-.218.498c.077.185.286.273.471.196l2.12-.876a1.517 1.517 0 0 1 .182.859zm8.558-8.24a1.81 1.81 0 1 0 0 3.619 1.81 1.81 0 0 0 0-3.619z"/>
+                        </svg>
+                        <span>Iniciar sesión con Steam (Oficial)</span>
                       </button>
-                    </form>
+
+                      <div className="relative flex py-1 items-center">
+                        <div className="flex-grow border-t border-white/10"></div>
+                        <span className="flex-shrink mx-2 text-[10px] text-white/40 uppercase font-semibold">o ingresar ID manualmente</span>
+                        <div className="flex-grow border-t border-white/10"></div>
+                      </div>
+
+                      {/* INGRESO MANUAL */}
+                      <form onSubmit={handleVincularSteam} className="space-y-2">
+                        <input
+                          type="text"
+                          placeholder="SteamID64 (ej: 76561198860923712)"
+                          value={steamIdInput}
+                          onChange={(e) => setSteamIdInput(e.target.value)}
+                          className="w-full bg-surface border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white outline-none focus:border-primary"
+                          required
+                        />
+                        <button
+                          type="submit"
+                          disabled={cargandoIntegracion}
+                          className="w-full bg-primary hover:bg-primary/90 text-white text-xs py-1.5 rounded-lg font-medium transition disabled:opacity-50"
+                        >
+                          {cargandoIntegracion ? 'Importando juegos...' : 'Vincular por ID'}
+                        </button>
+                      </form>
+                    </div>
                   )}
 
                   {datosSteam && (

@@ -77,7 +77,7 @@ const obtenerPerfilPorId = async (req, res) => {
       u.steam.top_juegos = safeParseJson(u.steam.top_juegos);
     }
 
-    let sinergia_porcentaje = 50;
+    let sinergia = { global: 50, riot: null, steam: null };
     let juegos_en_comun = [];
 
     if (req.usuario && String(req.usuario.id) !== String(id)) {
@@ -89,11 +89,17 @@ const obtenerPerfilPorId = async (req, res) => {
         steam: miSteam ? miSteam.toJSON() : null
       };
 
-      sinergia_porcentaje = calcularSinergiaDuo(solicitante, {
+      const resultadoSinergia = calcularSinergiaDuo(solicitante, {
         riot: u.riot,
         steam: u.steam,
         reputacion_porcentaje: u.reputacion_porcentaje
       });
+
+      if (typeof resultadoSinergia === 'object' && resultadoSinergia !== null) {
+        sinergia = resultadoSinergia;
+      } else {
+        sinergia.global = Number(resultadoSinergia) || 50;
+      }
 
       const misJuegosSteam = safeParseJson(miSteam?.top_juegos);
       const susJuegosSteam = u.steam?.top_juegos || [];
@@ -118,7 +124,9 @@ const obtenerPerfilPorId = async (req, res) => {
       ...u,
       es_premium: Boolean(u.es_premium || u.esPremium || Number(u.es_premium) === 1),
       verificado: Boolean(u.verificado || u.estaVerificado),
-      sinergia_porcentaje,
+      sinergia_porcentaje: sinergia.global,
+      sinergia_riot: sinergia.riot,
+      sinergia_steam: sinergia.steam,
       juegos_en_comun
     };
 
@@ -126,6 +134,7 @@ const obtenerPerfilPorId = async (req, res) => {
       exito: true,
       usuario,
       juegos_en_comun,
+      sinergia,
       riot: u.riot || null,
       steam: u.steam || null
     });
