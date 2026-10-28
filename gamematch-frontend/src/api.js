@@ -21,14 +21,19 @@ export const authApi = {
   },
   juegos: (token) => fetch(`${API_URL}/api/juegos`, { headers: authHeaders(token) }).then(manejarRespuesta),
 
+  // ---- Bloqueos ----
   bloquear: (token, bloqueado_id) => fetch(`${API_URL}/api/bloqueos`, { method: 'POST', headers: jsonHeaders(token), body: JSON.stringify({ bloqueado_id }) }).then(manejarRespuesta),
   desbloquear: (token, bloqueado_id) => fetch(`${API_URL}/api/bloqueos/${bloqueado_id}`, { method: 'DELETE', headers: authHeaders(token) }).then(manejarRespuesta),
+  desbloquearUsuario: (token, bloqueado_id) => fetch(`${API_URL}/api/bloqueos/${bloqueado_id}`, { method: 'DELETE', headers: authHeaders(token) }).then(manejarRespuesta),
   listarBloqueos: (token) => fetch(`${API_URL}/api/bloqueos`, { headers: authHeaders(token) }).then(manejarRespuesta),
+  obtenerBloqueados: (token) => fetch(`${API_URL}/api/bloqueos`, { headers: authHeaders(token) }).then(manejarRespuesta),
+
   reportar: (token, body) => fetch(`${API_URL}/api/reportes`, { method: 'POST', headers: jsonHeaders(token), body: JSON.stringify(body) }).then(manejarRespuesta),
   votar: (token, body) => fetch(`${API_URL}/api/reputacion`, { method: 'POST', headers: jsonHeaders(token), body: JSON.stringify(body) }).then(manejarRespuesta),
   companeros: (token) => fetch(`${API_URL}/api/companeros`, { headers: authHeaders(token) }).then(manejarRespuesta),
   partidas: (token, usuarioId) => fetch(`${API_URL}/api/partidas/${usuarioId}`, { headers: authHeaders(token) }).then(manejarRespuesta),
   perfilPublico: (token, id) => fetch(`${API_URL}/api/usuarios/${id}`, { headers: authHeaders(token) }).then(manejarRespuesta),
+
   // ---- Chat / Salas ----
   crearSala: (token, body) => fetch(`${API_URL}/api/salas`, { method: 'POST', headers: jsonHeaders(token), body: JSON.stringify(body) }).then(manejarRespuesta),
   misSalas: (token) => fetch(`${API_URL}/api/salas`, { headers: authHeaders(token) }).then(manejarRespuesta),
@@ -111,10 +116,18 @@ export const authApi = {
     if (!res.ok) throw new Error('Error al obtener destacados');
     return await res.json();
   },
+
   actualizarRolRiot: (token, posicion_principal) =>
     fetch(`${API_URL}/api/integraciones/riot/posicion`, {
       method: 'PUT',
       headers: jsonHeaders(token),
       body: JSON.stringify({ posicion_principal }),
+    }).then(manejarRespuesta),
+
+  calificarJugador: (token, usuarioId, datos) =>
+    fetch(`${API_URL}/api/usuarios/${usuarioId}/calificar`, {
+      method: 'POST',
+      headers: jsonHeaders(token),
+      body: JSON.stringify(datos),
     }).then(manejarRespuesta),
 };

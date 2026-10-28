@@ -7,6 +7,7 @@ import MiPerfil from './components/MiPerfil';
 import Landing from './components/Landing';
 import ModalPerfilUsuario from './components/ModalPerfilUsuario';
 import { socket } from './socket';
+import ModalBloqueados from './components/ModalBloqueados';
 
 const RANGOS_EDAD = [
   { value: 'menor_18', label: 'Menor de 18' },
@@ -55,7 +56,7 @@ export default function App() {
   const [googlePendiente, setGooglePendiente] = useState(null);
   const [rangoGoogle, setRangoGoogle] = useState('18_25');
   const [notificaciones, setNotificaciones] = useState([]);
-  
+  const [mostrarBloqueados, setMostrarBloqueados] = useState(false);
   const [mensajesNoLeidos, setMensajesNoLeidos] = useState({});
 
   const pagoProcesadoRef = useRef(false);
@@ -385,6 +386,16 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-3">
+            {/* BOTÓN USUARIOS BLOQUEADOS */}
+            <button
+              onClick={() => setMostrarBloqueados(true)}
+              className="text-xs bg-surface/80 hover:bg-white/10 border border-white/10 text-white/80 hover:text-white px-2.5 py-1.5 rounded-xl transition flex items-center gap-1.5"
+              title="Administrar usuarios bloqueados"
+            >
+              <span>🚫</span>
+              <span className="hidden md:inline">Bloqueados</span>
+            </button>
+
             <button
               onClick={() => setVista('perfil')}
               className={`flex items-center gap-2 px-2.5 py-1 rounded-xl transition ${
@@ -436,7 +447,15 @@ export default function App() {
           ) : null}
         </main>
 
-        {/* RENDERIZADO DEL MODAL SOBRE LA PANTALLA ACTUAL */}
+        {/* MODAL DE USUARIOS BLOQUEADOS */}
+        {mostrarBloqueados && (
+          <ModalBloqueados
+            token={sesion.token}
+            onClose={() => setMostrarBloqueados(false)}
+          />
+        )}
+
+        {/* RENDERIZADO DEL MODAL DE PERFIL SOBRE LA PANTALLA ACTUAL */}
         {perfilVerId && (
           <ModalPerfilUsuario
             token={sesion.token}

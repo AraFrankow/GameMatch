@@ -1,39 +1,86 @@
 const { Sala, SalaParticipante, Usuario, Notificacion } = require('../models');
 const { existeBloqueoEntre } = require('./bloqueoController');
 const { Op } = require('sequelize');
+
 const MAX_GRUPAL = 5;
+
 const esSegregacionValida = (rangoA, rangoB) => (rangoA === 'menor_18') === (rangoB === 'menor_18');
 
 const crearSala = async (req, res) => {
   try {
     const { tipo, nombre, participante_id } = req.body;
     const creador_id = req.usuario.id;
-    if (!['privada', 'grupal'].includes(tipo)) return res.status(400).json({ error: "tipo debe ser 'privada' o 'grupal'" });
+
+    if (!['privada', 'grupal'].includes(tipo)) {
+      return res.status(400).json({ error: "tipo debe ser 'privada' o 'grupal'" });
+    }
 
     if (tipo === 'privada') {
-      if (!participante_id) return res.status(400).json({ error: 'participante_id es obligatorio para salas privadas' });
-      if (Number(participante_id) === creador_id) return res.status(400).json({ error: 'No podes crear una sala con vos mismo' });
+      if (!participante_id) {
+        return res.status(400).json({ error: 'participante_id es obligatorio para salas privadas' });
+      }
+      if (Number(participante_id) === creador_id) {
+        return res.status(400).json({ error: 'No podés crear una sala con vos mismo' });
+      }
+
       const otro = await Usuario.findByPk(participante_id);
-      if (!otro) return res.status(404).json({ error: 'Usuario no encontrado' });
-      if (await existeBloqueoEntre(creador_id, participante_id)) return res.status(403).json({ error: 'No podes iniciar un chat con este usuario' });
-      if (!esSegregacionValida(req.usuario.rango_edad, otro.rango_edad)) return res.status(403).json({ error: 'No se puede iniciar un chat entre un menor de edad y un adulto' });
+      if (!otro) {
+        return res.status(404).json({ error: 'Usuario no encontrado' });
+      }
+
+      if (await existeBloqueoEntre(creador_id, participante_id)) {
+        return res.status(403).json({ error: 'No podés iniciar un chat con este usuario' });
+      }
+
+      if (!esSegregacionValida(req.usuario.rango_edad, otro.rango_edad)) {
+        return res.status(403).json({ error: 'No se puede iniciar un chat entre un menor de edad y un adulto' });
+      }
+
+      const esMenor = req.usuario.rango_edad === 'menor_18';
+      if (!esMenor) {
+        if (!req.usuario.verificado) {
+          return res.status(403).json({
+            error: 'Debés verificar tu rostro para iniciar chats en el entorno de adultos.'
+          });
+        }
+        if (!otro.verificado) {
+          return res.status(403).json({
+            error: 'El usuario destino aún no completó la verificación de su cuenta.'
+          });
+        }
+      }
 
       const salasCreador = await SalaParticipante.findAll({ where: { usuario_id: creador_id } });
       const idsSalasCreador = salasCreador.map((s) => s.sala_id);
+      
       const salaExistente = await Sala.findOne({ 
         where: { id: { [Op.in]: idsSalasCreador }, tipo: 'privada' }, 
         include: [{ model: SalaParticipante, as: 'salaParticipantes', where: { usuario_id: participante_id } }] 
       });
-      if (salaExistente) return res.json({ sala: salaExistente, yaExistia: true });
+
+      if (salaExistente) {
+        return res.json({ sala: salaExistente, yaExistia: true });
+      }
 
       const sala = await Sala.create({ creador_id, tipo: 'privada', max_participantes: 2 });
-      await SalaParticipante.bulkCreate([{ sala_id: sala.id, usuario_id: creador_id }, { sala_id: sala.id, usuario_id: participante_id }]);
+      await SalaParticipante.bulkCreate([
+        { sala_id: sala.id, usuario_id: creador_id },
+        { sala_id: sala.id, usuario_id: participante_id }
+      ]);
+
       return res.status(201).json({ sala });
     }
 
-    const sala = await Sala.create({ creador_id, tipo: 'grupal', nombre: nombre || null, max_participantes: MAX_GRUPAL });
+    const sala = await Sala.create({
+      creador_id,
+      tipo: 'grupal',
+      nombre: nombre || null,
+      max_participantes: MAX_GRUPAL
+    });
+    
     await SalaParticipante.create({ sala_id: sala.id, usuario_id: creador_id });
     return res.status(201).json({ sala });
+
   } catch (err) { 
     console.error('Error en crearSala:', err); 
     return res.status(500).json({ error: 'Error al crear la sala' }); 
@@ -53,7 +100,6 @@ const listarMisSalas = async (req, res) => {
           include: [{ 
             model: Usuario, 
             as: 'usuario', 
-            // ATRIBUTOS DE VERIFICACIÓN
             attributes: ['id', 'username', 'foto_perfil', 'estado', 'verificado', 'rango_edad'] 
           }] 
         }] 
@@ -81,17 +127,42 @@ const invitar = async (req, res) => {
     const { usuario_id } = req.body;
     const destId = Number(usuario_id);
 
-    if (!(await SalaParticipante.findOne({ where: { sala_id: id, usuario_id: req.usuario.id } }))) return res.status(403).json({ error: 'No sos participante de esta sala' });
+    if (!(await SalaParticipante.findOne({ where: { sala_id: id, usuario_id: req.usuario.id } }))) {
+      return res.status(403).json({ error: 'No sos participante de esta sala' });
+    }
+
     const sala = await Sala.findByPk(id);
     if (!sala) return res.status(404).json({ error: 'Sala no encontrada' });
     if (sala.tipo !== 'grupal') return res.status(400).json({ error: 'Solo se puede invitar a salas grupales' });
+
     const total = await SalaParticipante.count({ where: { sala_id: id } });
-    if (total >= sala.max_participantes) return res.status(400).json({ error: `La sala ya alcanzo el maximo de ${sala.max_participantes} participantes` });
+    if (total >= sala.max_participantes) {
+      return res.status(400).json({ error: `La sala ya alcanzó el máximo de ${sala.max_participantes} participantes` });
+    }
+
     const invitado = await Usuario.findByPk(destId);
     if (!invitado) return res.status(404).json({ error: 'Usuario a invitar no encontrado' });
-    if (await SalaParticipante.findOne({ where: { sala_id: id, usuario_id: destId } })) return res.status(409).json({ error: 'Ese usuario ya esta en la sala' });
-    if (await existeBloqueoEntre(req.usuario.id, destId)) return res.status(403).json({ error: 'No podes invitar a este usuario' });
-    if (!esSegregacionValida(req.usuario.rango_edad, invitado.rango_edad)) return res.status(403).json({ error: 'No se puede invitar a un usuario del otro lado de la barrera de edad' });
+
+    if (await SalaParticipante.findOne({ where: { sala_id: id, usuario_id: destId } })) {
+      return res.status(409).json({ error: 'Ese usuario ya está en la sala' });
+    }
+
+    if (await existeBloqueoEntre(req.usuario.id, destId)) {
+      return res.status(403).json({ error: 'No podés invitar a este usuario' });
+    }
+
+    if (!esSegregacionValida(req.usuario.rango_edad, invitado.rango_edad)) {
+      return res.status(403).json({ error: 'No se puede invitar a un usuario del otro lado de la barrera de edad' });
+    }
+
+    if (req.usuario.rango_edad !== 'menor_18') {
+      if (!req.usuario.verificado) {
+        return res.status(403).json({ error: 'Debés verificar tu rostro para invitar usuarios en el entorno de adultos' });
+      }
+      if (!invitado.verificado) {
+        return res.status(403).json({ error: 'El usuario a invitar no ha verificado su cuenta' });
+      }
+    }
 
     const notificacion = await Notificacion.create({
       usuario_id: destId,
@@ -121,6 +192,7 @@ const listarInvitaciones = async (req, res) => {
   try {
     const usuario_id = req.usuario.id;
     const invitaciones = await Notificacion.findAll({ where: { usuario_id, tipo: 'invitacion_sala', leida: false } });
+    
     const resultado = await Promise.all(invitaciones.map(async (n) => {
       let data = {};
       try { data = JSON.parse(n.contenido); } catch {}
@@ -132,6 +204,7 @@ const listarInvitaciones = async (req, res) => {
         nombre_sala: sala?.nombre || 'Sala grupal'
       };
     }));
+
     return res.json({ invitaciones: resultado });
   } catch (err) {
     console.error('Error en listarInvitaciones:', err);
@@ -143,16 +216,31 @@ const unirse = async (req, res) => {
   try {
     const { id } = req.params;
     const usuario_id = req.usuario.id;
+
     const invitaciones = await Notificacion.findAll({ where: { usuario_id, tipo: 'invitacion_sala', leida: false } });
-    const invitacion = invitaciones.find((n) => { try { return JSON.parse(n.contenido).sala_id === Number(id); } catch { return false; } });
-    if (!invitacion) return res.status(403).json({ error: 'No tenes una invitacion pendiente a esta sala' });
+    const invitacion = invitaciones.find((n) => { 
+      try { return JSON.parse(n.contenido).sala_id === Number(id); } catch { return false; } 
+    });
+
+    if (!invitacion) {
+      return res.status(403).json({ error: 'No tenés una invitación pendiente a esta sala' });
+    }
+
     const sala = await Sala.findByPk(id);
     if (!sala) return res.status(404).json({ error: 'Sala no encontrada' });
+
     const total = await SalaParticipante.count({ where: { sala_id: id } });
-    if (total >= sala.max_participantes) return res.status(400).json({ error: 'La sala ya esta llena' });
-    if (!(await SalaParticipante.findOne({ where: { sala_id: id, usuario_id } }))) await SalaParticipante.create({ sala_id: id, usuario_id });
+    if (total >= sala.max_participantes) {
+      return res.status(400).json({ error: 'La sala ya está llena' });
+    }
+
+    if (!(await SalaParticipante.findOne({ where: { sala_id: id, usuario_id } }))) {
+      await SalaParticipante.create({ sala_id: id, usuario_id });
+    }
+
     invitacion.leida = true;
     await invitacion.save();
+
     return res.json({ ok: true, mensaje: 'Te uniste a la sala' });
   } catch (err) { 
     console.error('Error en unirse:', err); 
@@ -208,4 +296,13 @@ const rechazarInvitacion = async (req, res) => {
   }
 };
 
-module.exports = { crearSala, listarMisSalas, invitar, unirse, listarInvitaciones, salir, esSegregacionValida, rechazarInvitacion };
+module.exports = { 
+  crearSala, 
+  listarMisSalas, 
+  invitar, 
+  unirse, 
+  listarInvitaciones, 
+  salir, 
+  esSegregacionValida, 
+  rechazarInvitacion 
+};

@@ -1,8 +1,8 @@
 const fs = require('fs');
 const path = require('path');
-const { Sequelize } = require('sequelize');
+const { Sequelize, Op } = require('sequelize');
 const { RekognitionClient, DetectFacesCommand } = require('@aws-sdk/client-rekognition');
-const { Usuario, IntegracionRiot, IntegracionSteam } = require('../models');
+const { Usuario, IntegracionRiot, IntegracionSteam, Sala, SalaParticipante, Reputacion, Calificacion } = require('../models');
 const { calcularSinergiaDuo } = require('../utils/sinergia');
 
 const rekognition = new RekognitionClient({
@@ -79,8 +79,38 @@ const obtenerPerfilPorId = async (req, res) => {
 
     let sinergia = { global: 50, riot: null, steam: null };
     let juegos_en_comun = [];
+    let puedeCalificar = false;
+    let desgloseEtiquetas = [];
+    const esSolicitantePremium = Boolean(
+      req.usuario?.es_premium || req.usuario?.esPremium || Number(req.usuario?.es_premium) === 1
+    );
 
     if (req.usuario && String(req.usuario.id) !== String(id)) {
+      try {
+        const chatCompartido = await SalaParticipante.findOne({
+          where: { usuario_id: req.usuario.id },
+          include: [
+            {
+              model: Sala,
+              as: 'sala',
+              where: { tipo: 'privada' },
+              required: true,
+              include: [
+                {
+                  model: SalaParticipante,
+                  as: 'salaParticipantes',
+                  where: { usuario_id: id },
+                  required: true,
+                },
+              ],
+            },
+          ],
+        });
+        puedeCalificar = Boolean(chatCompartido);
+      } catch (errChat) {
+        console.error('Error al verificar interacción de chat:', errChat);
+      }
+
       const miRiot = await IntegracionRiot.findOne({ where: { usuario_id: req.usuario.id } });
       const miSteam = await IntegracionSteam.findOne({ where: { usuario_id: req.usuario.id } });
 
@@ -120,6 +150,29 @@ const obtenerPerfilPorId = async (req, res) => {
       });
     }
 
+    if (esSolicitantePremium) {
+      try {
+        const ModeloReputacion = Calificacion || Reputacion;
+        
+        desgloseEtiquetas = await ModeloReputacion.findAll({
+          attributes: [
+            'etiqueta',
+            'tipo',
+            [Sequelize.fn('COUNT', Sequelize.col('etiqueta')), 'cantidad']
+          ],
+          where: {
+            evaluado_id: id,
+            etiqueta: { [Op.ne]: null }
+          },
+          group: ['etiqueta', 'tipo'],
+          order: [[Sequelize.literal('cantidad'), 'DESC']],
+          raw: true
+        });
+      } catch (errEtiquetas) {
+        console.error('Error al obtener desglose de etiquetas:', errEtiquetas);
+      }
+    }
+
     const usuario = {
       ...u,
       es_premium: Boolean(u.es_premium || u.esPremium || Number(u.es_premium) === 1),
@@ -127,12 +180,15 @@ const obtenerPerfilPorId = async (req, res) => {
       sinergia_porcentaje: sinergia.global,
       sinergia_riot: sinergia.riot,
       sinergia_steam: sinergia.steam,
-      juegos_en_comun
+      puede_calificar: puedeCalificar,
+      juegos_en_comun,
+      desglose_etiquetas: esSolicitantePremium ? desgloseEtiquetas : null
     };
 
     return res.json({
       exito: true,
       usuario,
+      puede_calificar: puedeCalificar,
       juegos_en_comun,
       sinergia,
       riot: u.riot || null,

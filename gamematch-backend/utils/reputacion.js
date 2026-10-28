@@ -1,20 +1,47 @@
-const { Reputacion } = require('../models');
-const { Op } = require('sequelize');
-const calcularReputacionBulk = async (usuarioIds) => {
-  if (usuarioIds.length === 0) return new Map();
-  const votos = await Reputacion.findAll({ where: { evaluado_id: { [Op.in]: usuarioIds } }, attributes: ['evaluado_id', 'voto'], raw: true });
-  const conteos = new Map();
-  for (const id of usuarioIds) conteos.set(id, { positivos: 0, negativos: 0 });
-  for (const v of votos) {
-    const c = conteos.get(v.evaluado_id);
-    if (!c) continue;
-    if (v.voto === 'positivo') c.positivos++; else c.negativos++;
+const { Calificacion, Reputacion } = require('../models');
+
+const ModeloReputacion = Calificacion || Reputacion;
+
+async function calcularReputacionBulk(usuarioIds) {
+  const resultadosMap = new Map();
+
+  if (!usuarioIds || usuarioIds.length === 0) return resultadosMap;
+
+  try {
+    const votos = await ModeloReputacion.findAll({
+      where: { evaluado_id: usuarioIds },
+      attributes: ['evaluado_id', 'tipo'],
+      raw: true,
+    });
+
+    const conteo = {};
+
+    usuarioIds.forEach((id) => {
+      conteo[id] = { total: 0, positivas: 0 };
+    });
+
+    votos.forEach((v) => {
+      if (conteo[v.evaluado_id]) {
+        conteo[v.evaluado_id].total += 1;
+        if (v.tipo === 'positiva' || v.tipo === 'positivo') {
+          conteo[v.evaluado_id].positivas += 1;
+        }
+      }
+    });
+
+    Object.keys(conteo).forEach((id) => {
+      const { total, positivas } = conteo[id];
+      const porcentaje = total > 0 ? Math.round((positivas / total) * 100) : 100;
+      
+      resultadosMap.set(Number(id), porcentaje);
+      resultadosMap.set(String(id), porcentaje);
+    });
+
+    return resultadosMap;
+  } catch (error) {
+    console.error('Error en calcularReputacionBulk:', error);
+    return resultadosMap;
   }
-  const resultado = new Map();
-  for (const [id, c] of conteos) {
-    const total = c.positivos + c.negativos;
-    resultado.set(id, { positivos: c.positivos, negativos: c.negativos, porcentaje: total === 0 ? null : Math.round((c.positivos / total) * 100) });
-  }
-  return resultado;
-};
+}
+
 module.exports = { calcularReputacionBulk };

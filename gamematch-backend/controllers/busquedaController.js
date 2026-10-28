@@ -2,6 +2,7 @@ const { Usuario, UsuarioPlataforma, UsuarioJuego, Juego, IntegracionRiot, Integr
 const { Op } = require('sequelize');
 const { calcularSinergiaDuo } = require('../utils/sinergia');
 const { calcularReputacionBulk } = require('../utils/reputacion');
+const { obtenerIdsBloqueados } = require('./bloqueoController');
 
 const RANGOS_ORDEN = ['IRON', 'BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'EMERALD', 'DIAMOND', 'MASTER', 'GRANDMASTER', 'CHALLENGER'];
 
@@ -9,6 +10,9 @@ const buscarCompaneros = async (req, res) => {
   try {
     const usuarioSolicitante = req.usuario;
     const esPremium = Boolean(usuarioSolicitante.es_premium);
+
+    const idsBloqueados = await obtenerIdsBloqueados(usuarioSolicitante.id);
+    const idsExcluidos = [usuarioSolicitante.id, ...idsBloqueados];
 
     const {
       juego_id,
@@ -22,7 +26,7 @@ const buscarCompaneros = async (req, res) => {
     } = req.query;
 
     const whereUsuario = {
-      id: { [Op.ne]: usuarioSolicitante.id },
+      id: { [Op.notIn]: idsExcluidos },
       suspendido: false,
     };
 
