@@ -1,23 +1,30 @@
 const { verificarToken } = require('../utils/jwt');
 const { Usuario } = require('../models');
+const jwt = require('jsonwebtoken');
 
 const verificarAuth = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Token no provisto' });
+      return res.status(401).json({ error: 'Token no proporcionado' });
     }
+
     const token = authHeader.split(' ')[1];
-    const payload = verificarToken(token);
-    const usuario = await Usuario.findByPk(payload.id);
-    if (!usuario) return res.status(401).json({ error: 'Usuario no encontrado' });
-    if (usuario.suspendido) return res.status(403).json({ error: 'Tu cuenta fue suspendida' });
-    
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    const usuario = await Usuario.findByPk(decoded.id);
+    if (!usuario) {
+      return res.status(401).json({ error: 'Usuario no encontrado' });
+    }
+
+    if (usuario.suspendido) {
+      return res.status(403).json({ error: 'Tu cuenta fue suspendida' });
+    }
+
     req.usuario = usuario;
     next();
   } catch (err) {
-    if (err.name === 'TokenExpiredError') return res.status(401).json({ error: 'Token expirado' });
-    return res.status(401).json({ error: 'Token invalido' });
+    return res.status(401).json({ error: 'Token inválido o expirado' });
   }
 };
 

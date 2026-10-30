@@ -7,5 +7,6 @@ const Reporte = sequelize.define('Reporte', {
   motivo: { type: DataTypes.ENUM('lenguaje_inapropiado', 'acoso', 'spam', 'otro'), allowNull: false },
   comentario: { type: DataTypes.TEXT, allowNull: true },
   estado: { type: DataTypes.ENUM('pendiente', 'revisado', 'desestimado'), allowNull: false, defaultValue: 'pendiente' },
+  evidencia_chat: {type: DataTypes.TEXT, allowNull: true,},
 }, { tableName: 'reportes', timestamps: true, updatedAt: false });
 module.exports = Reporte;

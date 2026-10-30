@@ -342,9 +342,68 @@ const obtenerPremiumDestacados = async (req, res) => {
   }
 };
 
+const toggleSuspension = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { suspendido } = req.body;
+
+    const usuario = await Usuario.findByPk(id);
+    if (!usuario) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    usuario.suspendido = suspendido !== undefined ? suspendido : !usuario.suspendido;
+    await usuario.save();
+
+    if (usuario.suspendido) {
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`usuario_${usuario.id}`).emit('cuenta_suspendida', {
+          mensaje: '🚫 Tu cuenta ha sido suspendida por un administrador.'
+        });
+      }
+    }
+
+    return res.json({
+      mensaje: usuario.suspendido ? 'Usuario suspendido' : 'Usuario reactivado',
+      usuario
+    });
+  } catch (err) {
+    console.error('Error en toggleSuspension:', err);
+    return res.status(500).json({ error: 'Error al cambiar estado del usuario' });
+  }
+};
+
+const obtenerUsuarios = async (req, res) => {
+  try {
+    const { q } = req.query;
+
+    const donde = {};
+    if (q && q.trim() !== '') {
+      donde[Op.or] = [
+        { username: { [Op.like]: `%${q.trim()}%` } },
+        { email: { [Op.like]: `%${q.trim()}%` } }
+      ];
+    }
+
+    const usuarios = await Usuario.findAll({
+      where: donde,
+      attributes: ['id', 'username', 'email', 'rol', 'suspendido', 'es_premium', 'foto_perfil'],
+      order: [['id', 'DESC']]
+    });
+
+    return res.json({ usuarios });
+  } catch (err) {
+    console.error('Error al obtener usuarios:', err);
+    return res.status(500).json({ error: 'Error al cargar la lista de usuarios' });
+  }
+};
+
 module.exports = { 
   eliminarCuenta,
   obtenerPerfilPorId,
   verificarCamara,
   obtenerPremiumDestacados,
+  toggleSuspension,
+  obtenerUsuarios
 };

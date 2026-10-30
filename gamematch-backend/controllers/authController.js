@@ -138,6 +138,9 @@ const me = async (req, res) => {
     });
 
     if (!usuario) return res.status(404).json({ error: 'Usuario no encontrado' });
+    if (usuario.suspendido) {
+      return res.status(403).json({ error: 'Tu cuenta fue suspendida' });
+    }
 
     return res.json({ 
       usuario: {

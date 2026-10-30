@@ -1,8 +1,20 @@
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 async function manejarRespuesta(res) {
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Error inesperado');
+  let data;
+  try {
+    data = await res.json();
+  } catch (err) {
+    throw new Error(`Error en el servidor (${res.status}: ${res.statusText})`);
+  }
+
+  if (!res.ok) {
+    if (res.status === 403 && data.error?.includes('suspendida')) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('usuario');
+    }
+    throw new Error(data.error || 'Error inesperado');
+  }
   return data;
 }
 
@@ -129,5 +141,30 @@ export const authApi = {
       method: 'POST',
       headers: jsonHeaders(token),
       body: JSON.stringify(datos),
+    }).then(manejarRespuesta),
+
+  // ---- Panel de Administración ----
+  adminObtenerReportes: (token, estado) => {
+    const url = estado ? `${API_URL}/api/reportes?estado=${estado}` : `${API_URL}/api/reportes`;
+    return fetch(url, { headers: authHeaders(token) }).then(manejarRespuesta);
+  },
+
+  adminResolverReporte: (token, id, { estado, accion }) =>
+    fetch(`${API_URL}/api/reportes/${id}`, {
+      method: 'PUT',
+      headers: jsonHeaders(token),
+      body: JSON.stringify({ estado, accion }),
+    }).then(manejarRespuesta),
+
+  adminObtenerUsuarios: (token, q = '') =>
+    fetch(`${API_URL}/api/usuarios?q=${encodeURIComponent(q)}`, {
+      headers: authHeaders(token),
+    }).then(manejarRespuesta),
+
+  adminToggleSuspension: (token, id, suspendido) =>
+    fetch(`${API_URL}/api/usuarios/${id}/suspender`, {
+      method: 'PUT',
+      headers: jsonHeaders(token),
+      body: JSON.stringify({ suspendido }),
     }).then(manejarRespuesta),
 };

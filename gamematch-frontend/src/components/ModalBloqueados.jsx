@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { authApi } from '../api';
 
-export default function ModalBloqueados({ token, onClose }) {
+export default function ModalBloqueados({ token, onClose, onDesbloquear }) {
   const [bloqueados, setBloqueados] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
@@ -23,8 +23,16 @@ export default function ModalBloqueados({ token, onClose }) {
     try {
       await authApi.desbloquearUsuario(token, usuarioId);
       setBloqueados((prev) =>
-        prev.filter((b) => b.bloqueado_id !== usuarioId && b.bloqueado?.id !== usuarioId)
+        prev.filter((item) => {
+          const u = item.bloqueado || item;
+          const idActual = u.id || item.bloqueado_id;
+          return idActual !== usuarioId;
+        })
       );
+
+      if (onDesbloquear) {
+        onDesbloquear(usuarioId);
+      }
     } catch (err) {
       alert(err.message || 'Error al desbloquear usuario');
     }
@@ -55,28 +63,25 @@ export default function ModalBloqueados({ token, onClose }) {
               </p>
             ) : (
               bloqueados.map((item) => {
-                const usuario = item.bloqueado;
-                if (!usuario) return null;
+                const u = item.bloqueado || item;
+                const usuarioId = u.id || item.bloqueado_id;
 
                 return (
-                  <div
-                    key={item.id || usuario.id}
-                    className="flex items-center justify-between p-3 bg-surface/50 border border-white/5 rounded-xl"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-full bg-surface overflow-hidden flex items-center justify-center font-bold text-xs text-white border border-white/10">
-                        {usuario.foto_perfil ? (
-                          <img src={usuario.foto_perfil} alt={usuario.username} className="w-full h-full object-cover" />
+                  <div key={item.id || u.id} className="flex items-center justify-between p-3 bg-surface border border-white/5 rounded-xl">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-card border border-white/10 flex items-center justify-center font-bold text-xs text-white overflow-hidden shrink-0">
+                        {u.foto_perfil ? (
+                          <img src={u.foto_perfil} alt="" className="w-full h-full object-cover" />
                         ) : (
-                          usuario.username?.[0]?.toUpperCase()
+                          (u.username?.[0] || 'U').toUpperCase()
                         )}
                       </div>
-                      <span className="text-sm font-medium text-white">{usuario.username}</span>
+                      <span className="text-xs font-semibold text-white">@{u.username}</span>
                     </div>
 
                     <button
-                      onClick={() => handleDesbloquear(usuario.id)}
-                      className="text-xs bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 px-3 py-1.5 rounded-lg transition font-medium"
+                      onClick={() => handleDesbloquear(usuarioId)}
+                      className="text-xs bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 px-3 py-1 rounded-lg transition font-medium"
                     >
                       Desbloquear
                     </button>

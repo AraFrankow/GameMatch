@@ -8,6 +8,7 @@ import Landing from './components/Landing';
 import ModalPerfilUsuario from './components/ModalPerfilUsuario';
 import { socket } from './socket';
 import ModalBloqueados from './components/ModalBloqueados';
+import AdminPanel from './components/admin/AdminPanel';
 
 const RANGOS_EDAD = [
   { value: 'menor_18', label: 'Menor de 18' },
@@ -15,6 +16,7 @@ const RANGOS_EDAD = [
   { value: '26_35', label: '26 a 35' },
   { value: '36_mas', label: '36 o más' },
 ];
+const FORM_INICIAL = { username: '', email: '', password: '', rango_edad: '18_25' };
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
@@ -28,8 +30,10 @@ function Campo({ label, ...props }) {
 }
 
 export default function App() {
+  const [refrescoKey, setRefrescoKey] = useState(0);
+  const incrementarRefresco = () => setRefrescoKey((prev) => prev + 1);
   const [modo, setModo] = useState('login');
-  const [form, setForm] = useState({ username: '', email: '', password: '', rango_edad: '18_25' });
+  const [form, setForm] = useState(FORM_INICIAL);
 
   const [sesion, setSesion] = useState(() => {
     const token = localStorage.getItem('gm_token');
@@ -50,7 +54,7 @@ export default function App() {
 
   const [vista, setVista] = useState(sesion ? 'busqueda' : 'landing');
   const [salaActivaId, setSalaActivaId] = useState(null);
-  const [perfilVerId, setPerfilVerId] = useState(null); // ID para abrir el ModalPerfilUsuario
+  const [perfilVerId, setPerfilVerId] = useState(null);
   const [error, setError] = useState('');
   const [cargando, setCargando] = useState(false);
   const [googlePendiente, setGooglePendiente] = useState(null);
@@ -70,6 +74,11 @@ export default function App() {
 
   const totalMensajesNoLeidos = Object.values(mensajesNoLeidos).reduce((acc, curr) => acc + curr, 0);
 
+  const resetearFormulario = () => {
+    setForm(FORM_INICIAL);
+    setError('');
+  };
+
   const guardarSesion = (token, usuario) => {
     const DIAS_EXPIRACION = 7;
     const tiempoExpiracion = Date.now() + DIAS_EXPIRACION * 24 * 60 * 60 * 1000;
@@ -80,6 +89,7 @@ export default function App() {
 
     setSesion({ token, usuario });
     setVista('busqueda');
+    resetearFormulario();
   };
 
   const handleActualizarUsuario = (nuevoUsuario) => {
@@ -94,12 +104,11 @@ export default function App() {
     socket.connect();
   };
 
-  // Abre el ModalPerfilUsuario al hacer clic en "Ver perfil"
   const handleVerPerfil = (idUsuario) => {
     setPerfilVerId(idUsuario);
   };
 
-  // --- CAPTURAR RETORNO DE PAGO DE STRIPE ---
+  // PAGO DE STRIPE
   useEffect(() => {
     if (!sesion?.token) return;
 
@@ -109,7 +118,6 @@ export default function App() {
 
     if (pagoStatus === 'exito' && sessionId && !pagoProcesadoRef.current) {
       pagoProcesadoRef.current = true;
-
       window.history.replaceState({}, document.title, window.location.pathname);
 
       const URL_BACK = import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -199,6 +207,30 @@ export default function App() {
     }
   }, [sesion?.token]);
 
+  useEffect(() => {
+    if (!socket || !sesion?.usuario?.id) return;
+
+    socket.emit('unirse_usuario', sesion.usuario.id);
+
+    const handleSuspension = (data) => {
+      localStorage.removeItem('gm_token');
+      localStorage.removeItem('gm_usuario');
+      localStorage.removeItem('gm_expira');
+
+      setForm(FORM_INICIAL);
+      setSesion(null);
+      setVista('auth');
+
+      setError(data?.mensaje || '🚫 Tu cuenta ha sido suspendida por un administrador.');
+    };
+
+    socket.on('cuenta_suspendida', handleSuspension);
+
+    return () => {
+      socket.off('cuenta_suspendida', handleSuspension);
+    };
+  }, [socket, sesion?.usuario?.id]);
+
   const aceptarInvitacion = async (notificacion) => {
     if (!sesion?.token || !sesion?.usuario) return;
     try {
@@ -275,7 +307,7 @@ export default function App() {
     setPerfilVerId(null);
     setNotificaciones([]);
     setMensajesNoLeidos({});
-    setForm({ username: '', email: '', password: '', rango_edad: '18_25' });
+    resetearFormulario();
     localStorage.removeItem('gm_token');
     localStorage.removeItem('gm_usuario');
     localStorage.removeItem('gm_expira');
@@ -285,8 +317,8 @@ export default function App() {
     if (vista === 'landing') {
       return (
         <Landing
-          onNavigateToLogin={() => { setModo('login'); setVista('auth'); }}
-          onNavigateToRegister={() => { setModo('registro'); setVista('auth'); }}
+          onNavigateToLogin={() => { setModo('login'); resetearFormulario(); setVista('auth'); }}
+          onNavigateToRegister={() => { setModo('registro'); resetearFormulario(); setVista('auth'); }}
         />
       );
     }
@@ -321,8 +353,8 @@ export default function App() {
               ) : (
                 <>
                   <div className="flex mb-5 bg-surface rounded-lg p-1">
-                    <button onClick={() => { setModo('login'); setError(''); }} className={`flex-1 py-1.5 rounded-md text-sm font-medium transition ${modo === 'login' ? 'bg-primary text-white' : 'text-white/50'}`}>Iniciar sesión</button>
-                    <button onClick={() => { setModo('registro'); setError(''); }} className={`flex-1 py-1.5 rounded-md text-sm font-medium transition ${modo === 'registro' ? 'bg-primary text-white' : 'text-white/50'}`}>Registrarme</button>
+                    <button onClick={() => { setModo('login'); resetearFormulario(); }} className={`flex-1 py-1.5 rounded-md text-sm font-medium transition ${modo === 'login' ? 'bg-primary text-white' : 'text-white/50'}`}>Iniciar sesión</button>
+                    <button onClick={() => { setModo('registro'); resetearFormulario(); }} className={`flex-1 py-1.5 rounded-md text-sm font-medium transition ${modo === 'registro' ? 'bg-primary text-white' : 'text-white/50'}`}>Registrarme</button>
                   </div>
 
                   <form onSubmit={handleSubmit}>
@@ -337,7 +369,18 @@ export default function App() {
                         </select>
                       </label>
                     )}
-                    {error && <p className="text-repRojo text-sm mb-3 bg-repRojo/10 rounded-lg px-3 py-2">{error}</p>}
+
+                    {/* CARTEL DE ERROR*/}
+                    {error && (
+                      <div className={`text-xs rounded-xl p-3 mb-4 border ${
+                        error.toLowerCase().includes('suspendid')
+                          ? 'bg-red-500/20 border-red-500/50 text-red-300 font-medium'
+                          : 'bg-red-500/10 border-red-500/20 text-red-400'
+                      }`}>
+                        {error}
+                      </div>
+                    )}
+
                     <button type="submit" disabled={cargando} className="w-full bg-primary hover:bg-primary/90 text-white font-medium rounded-lg py-2 transition disabled:opacity-50 mb-4">
                       {cargando ? 'Cargando...' : modo === 'registro' ? 'Crear cuenta' : 'Entrar'}
                     </button>
@@ -386,6 +429,22 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-3">
+            {/* BOTÓN ADMIN */}
+            {sesion.usuario?.rol === 'admin' && (
+              <button
+                onClick={() => setVista('admin')}
+                className={`text-xs px-2.5 py-1.5 rounded-xl transition flex items-center gap-1 font-semibold ${
+                  vista === 'admin'
+                    ? 'bg-amber-500 text-black'
+                    : 'bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30'
+                }`}
+                title="Panel de Administración"
+              >
+                <span>🛡️</span>
+                <span className="hidden md:inline">Admin</span>
+              </button>
+            )}
+
             {/* BOTÓN USUARIOS BLOQUEADOS */}
             <button
               onClick={() => setMostrarBloqueados(true)}
@@ -420,8 +479,14 @@ export default function App() {
         </header>
 
         <main className="flex-1">
-          {vista === 'busqueda' ? (
+          {vista === 'admin' ? (
+            <AdminPanel
+              token={sesion.token}
+              onVolver={() => setVista('busqueda')}
+            />
+          ) : vista === 'busqueda' ? (
             <Busqueda 
+              key={refrescoKey}
               token={sesion.token} 
               usuario={sesion.usuario} 
               onVerPerfil={handleVerPerfil} 
@@ -447,15 +512,15 @@ export default function App() {
           ) : null}
         </main>
 
-        {/* MODAL DE USUARIOS BLOQUEADOS */}
         {mostrarBloqueados && (
           <ModalBloqueados
             token={sesion.token}
             onClose={() => setMostrarBloqueados(false)}
+            onDesbloquear={incrementarRefresco}
           />
         )}
 
-        {/* RENDERIZADO DEL MODAL DE PERFIL SOBRE LA PANTALLA ACTUAL */}
+        {/* MODAL DE PERFIL */}
         {perfilVerId && (
           <ModalPerfilUsuario
             token={sesion.token}
