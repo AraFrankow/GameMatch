@@ -6,6 +6,20 @@ const { generarToken } = require('../utils/jwt');
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 const SALT_ROUNDS = 10;
 
+const verificarSuspension = (usuario) => {
+  if (usuario.suspendidoHasta && new Date(usuario.suspendidoHasta) > new Date()) {
+    const fechaFin = new Date(usuario.suspendidoHasta).toLocaleString('es-AR', {
+      dateStyle: 'medium',
+      timeStyle: 'short'
+    });
+    return `Tu cuenta se encuentra suspendida hasta el ${fechaFin} por comportamiento tóxico.`;
+  }
+  if (usuario.suspendido) {
+    return 'Tu cuenta fue suspendida indefinidamente.';
+  }
+  return null;
+};
+
 const usuarioPublico = (u) => ({
   id: u.id,
   username: u.username,
@@ -47,12 +61,14 @@ const registro = async (req, res) => {
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
+    const mensajeSuspension = verificarSuspension(usuario);
     if (!email || !password) return res.status(400).json({ error: 'email y password son obligatorios' });
 
     const usuario = await Usuario.findOne({ where: { email } });
     if (!usuario || !usuario.password_hash) return res.status(401).json({ error: 'Credenciales inválidas' });
     if (!(await bcrypt.compare(password, usuario.password_hash))) return res.status(401).json({ error: 'Credenciales inválidas' });
-    if (usuario.suspendido) return res.status(403).json({ error: 'Tu cuenta fue suspendida' });
+
+    if (mensajeSuspension) return res.status(403).json({ error: mensajeSuspension });
 
     const token = generarToken({ id: usuario.id, rol: usuario.rol });
     return res.json({ usuario: usuarioPublico(usuario), token });
@@ -70,6 +86,7 @@ const googleAuth = async (req, res) => {
     const ticket = await googleClient.verifyIdToken({ idToken: id_token, audience: process.env.GOOGLE_CLIENT_ID });
     const payload = ticket.getPayload();
     const { sub: google_id, email, picture } = payload;
+    const mensajeSuspension = verificarSuspension(usuario);
 
     let authGoogle = await AuthGoogle.findOne({ where: { google_id } });
     let usuario;
@@ -89,7 +106,7 @@ const googleAuth = async (req, res) => {
       authGoogle = await AuthGoogle.create({ usuario_id: usuario.id, google_id, email_google: email });
     }
 
-    if (usuario.suspendido) return res.status(403).json({ error: 'Tu cuenta fue suspendida' });
+    if (mensajeSuspension) return res.status(403).json({ error: mensajeSuspension });
 
     const token = generarToken({ id: usuario.id, rol: usuario.rol });
     return res.json({ usuario: usuarioPublico(usuario), token });
@@ -136,11 +153,10 @@ const me = async (req, res) => {
     const usuario = await Usuario.findByPk(req.usuario.id, {
       include: ['steam', 'riot']
     });
+    const mensajeSuspension = verificarSuspension(usuario);
 
     if (!usuario) return res.status(404).json({ error: 'Usuario no encontrado' });
-    if (usuario.suspendido) {
-      return res.status(403).json({ error: 'Tu cuenta fue suspendida' });
-    }
+    if (mensajeSuspension) return res.status(403).json({ error: mensajeSuspension });
 
     return res.json({ 
       usuario: {

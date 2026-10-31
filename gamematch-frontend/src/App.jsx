@@ -9,6 +9,7 @@ import ModalPerfilUsuario from './components/ModalPerfilUsuario';
 import { socket } from './socket';
 import ModalBloqueados from './components/ModalBloqueados';
 import AdminPanel from './components/admin/AdminPanel';
+import { createPortal } from 'react-dom';
 
 const RANGOS_EDAD = [
   { value: 'menor_18', label: 'Menor de 18' },
@@ -412,7 +413,7 @@ export default function App() {
   return (
     <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
       <div className="min-h-screen bg-gm-gradient flex flex-col">
-        <header className="bg-card/80 backdrop-blur border-b border-white/10 px-4 py-2.5 flex items-center justify-between sticky top-0 z-40">
+        <header className="bg-card/80 backdrop-blur border-b border-white/10 px-4 py-2.5 flex items-center justify-between sticky top-0 z-30">
           <div className="flex items-center gap-4">
             <span className="text-white font-bold text-lg cursor-pointer" onClick={() => setVista('busqueda')}>GameMatch</span>
             <div className="flex gap-2">
@@ -512,16 +513,16 @@ export default function App() {
           ) : null}
         </main>
 
-        {mostrarBloqueados && (
+        {mostrarBloqueados && createPortal(
           <ModalBloqueados
             token={sesion.token}
             onClose={() => setMostrarBloqueados(false)}
             onDesbloquear={incrementarRefresco}
-          />
+          />,
+          document.body
         )}
 
-        {/* MODAL DE PERFIL */}
-        {perfilVerId && (
+        {perfilVerId && createPortal(
           <ModalPerfilUsuario
             token={sesion.token}
             usuarioId={perfilVerId}
@@ -532,7 +533,8 @@ export default function App() {
               setVista('chat');
               if (sala?.id) setSalaActivaId(sala.id);
             }}
-          />
+          />,
+          document.body
         )}
       </div>
     </GoogleOAuthProvider>

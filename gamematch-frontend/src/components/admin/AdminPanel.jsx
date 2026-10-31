@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { authApi } from '../../api';
+import TextoExpandible from '../TextoExpandible';
 
 export default function AdminPanel({ token, onVolver }) {
   const [pestaña, setPestaña] = useState('reportes');
@@ -59,6 +61,40 @@ export default function AdminPanel({ token, onVolver }) {
     }
   };
 
+  const obtenerEvidenciaReal = (r) => {
+    const candidatos = [r.evidencia_chat, r.evidenciaChat, r.descripcion, r.comentario];
+    for (const item of candidatos) {
+      if (!item) continue;
+      if (Array.isArray(item) && item.length > 0) return item;
+      if (typeof item === 'string') {
+        const trimmed = item.trim();
+        if (trimmed !== '' && trimmed !== '[]' && trimmed !== '-') return trimmed;
+      }
+      if (typeof item === 'object' && Object.keys(item).length > 0) return item;
+    }
+    return null;
+  };
+
+  const obtenerMensajesEvidencia = (evidencia) => {
+    if (!evidencia) return [];
+
+    if (Array.isArray(evidencia)) return evidencia;
+
+    if (typeof evidencia === 'string') {
+      try {
+        const parsed = JSON.parse(evidencia);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (typeof parsed === 'object' && parsed !== null) return [parsed];
+      } catch (e) {
+        return [{ emisor: 'IA Moderación', texto: evidencia }];
+      }
+    }
+
+    if (typeof evidencia === 'object') return [evidencia];
+
+    return [{ emisor: 'IA Moderación', texto: String(evidencia) }];
+  };
+
   return (
     <div className="w-full max-w-6xl mx-auto p-4 space-y-6 text-left relative">
       <div className="flex items-center justify-between border-b border-white/10 pb-4">
@@ -70,7 +106,9 @@ export default function AdminPanel({ token, onVolver }) {
           </div>
         </div>
 
-        <button onClick={onVolver} className="text-xs bg-surface hover:bg-white/10 text-white/70 px-3 py-1.5 rounded-xl transition">Volver a Búsqueda</button>
+        <button onClick={onVolver} className="text-xs bg-surface hover:bg-white/10 text-white/70 px-3 py-1.5 rounded-xl transition">
+          Volver a Búsqueda
+        </button>
       </div>
 
       {/* NAVEGACIÓN POR PESTAÑAS */}
@@ -99,7 +137,6 @@ export default function AdminPanel({ token, onVolver }) {
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-white/90">Listado de Denuncias</h3>
 
-            {/* Filtro por estado */}
             <div className="flex gap-2">
               {['pendiente', 'revisado', 'desestimado'].map((est) => (
                 <button
@@ -138,70 +175,74 @@ export default function AdminPanel({ token, onVolver }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {reportes.map((r) => (
-                    <tr key={r.id} className="hover:bg-white/[0.02]">
-                      <td className="p-3 font-medium text-white">@{r.reportador?.username || 'Anónimo'}</td>
-                      <td className="p-3 font-medium text-red-400">
-                        @{r.reportado?.username || 'Desconocido'}
-                        {r.reportado?.suspendido && (
-                          <span className="ml-1 text-[10px] bg-red-500/20 text-red-300 px-1.5 py-0.5 rounded">
-                            SUSPENDIDO
+                  {reportes.map((r) => {
+                    const evidenciaValida = obtenerEvidenciaReal(r);
+
+                    return (
+                      <tr key={r.id} className="hover:bg-white/[0.02]">
+                        <td className="p-3 font-medium text-white">@{r.reportador?.username || 'Anónimo'}</td>
+                        <td className="p-3 font-medium text-red-400">
+                          @{r.reportado?.username || 'Desconocido'}
+                          {r.reportado?.suspendido && (
+                            <span className="ml-1 text-[10px] bg-red-500/20 text-red-300 px-1.5 py-0.5 rounded">
+                              SUSPENDIDO
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3">
+                          <span className="bg-white/5 border border-white/10 px-2 py-0.5 rounded-md font-mono text-[11px]">
+                            {r.motivo}
                           </span>
-                        )}
-                      </td>
-                      <td className="p-3">
-                        <span className="bg-white/5 border border-white/10 px-2 py-0.5 rounded-md font-mono text-[11px]">
-                          {r.motivo}
-                        </span>
-                      </td>
-                      <td className="p-3 max-w-xs truncate text-white/70" title={r.comentario}>
-                        {r.comentario || '-'}
-                      </td>
-                      <td className="p-3 capitalize">{r.estado}</td>
-                      <td className="p-3">
-                        {r.evidencia_chat && r.evidencia_chat.length > 0 ? (
-                          <button
-                            onClick={() => setChatEvidencia(r.evidencia_chat)}
-                            className="bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 px-2.5 py-1 rounded-lg text-xs flex items-center gap-1 font-medium transition"
-                          >
-                            <span>💬</span> Ver ({r.evidencia_chat.length}) msjs
-                          </button>
-                        ) : (
-                          <span className="text-white/30 text-[11px] italic">Sin registro</span>
-                        )}
-                      </td>
-                      <td className="p-3 text-right space-x-2">
-                        {r.estado === 'pendiente' ? (
+                        </td>
+                        <td className="p-3 max-w-xs text-white/70 break-words" title={r.comentario}>
+                          <TextoExpandible texto={r.comentario} limite={45} />
+                        </td>
+                        <td className="p-3 capitalize">{r.estado}</td>
+                        <td className="p-3">
+                          {evidenciaValida ? (
+                            <button
+                              onClick={() => setChatEvidencia(evidenciaValida)}
+                              className="bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 px-2.5 py-1 rounded-lg text-xs flex items-center gap-1 font-medium transition cursor-pointer"
+                            >
+                              <span>💬</span> Ver evidencia
+                            </button>
+                          ) : (
+                            <span className="text-white/30 text-[11px] italic">Sin registro</span>
+                          )}
+                        </td>
+                        <td className="p-3 text-right space-x-2">
+                          {r.estado === 'pendiente' ? (
                             <>
-                            <button
+                              <button
                                 onClick={() => handleResolver(r.id, 'revisado', 'suspender')}
-                                className="bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/30 px-2.5 py-1 rounded-lg transition font-medium"
+                                className="bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/30 px-2.5 py-1 rounded-lg transition font-medium cursor-pointer"
                                 title="Suspender al usuario reportado"
-                            >
+                              >
                                 Suspender
-                            </button>
-                            <button
+                              </button>
+                              <button
                                 onClick={() => handleResolver(r.id, 'desestimado')}
-                                className="bg-surface hover:bg-white/10 text-white/60 px-2.5 py-1 rounded-lg transition font-medium"
-                            >
+                                className="bg-surface hover:bg-white/10 text-white/60 px-2.5 py-1 rounded-lg transition font-medium cursor-pointer"
+                              >
                                 Desestimar
-                            </button>
+                              </button>
                             </>
-                        ) : (
+                          ) : (
                             <button
-                            onClick={() => handleToggleSuspension(r.reportado?.id, r.reportado?.suspendido)}
-                            className={`px-2.5 py-1 rounded-lg transition font-medium ${
+                              onClick={() => handleToggleSuspension(r.reportado?.id, r.reportado?.suspendido)}
+                              className={`px-2.5 py-1 rounded-lg transition font-medium cursor-pointer ${
                                 r.reportado?.suspendido
-                                ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30'
-                                : 'bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/30'
-                            }`}
+                                  ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30'
+                                  : 'bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/30'
+                              }`}
                             >
-                            {r.reportado?.suspendido ? 'Reactivar' : 'Suspender'}
+                              {r.reportado?.suspendido ? 'Reactivar' : 'Suspender'}
                             </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -224,7 +265,7 @@ export default function AdminPanel({ token, onVolver }) {
               />
               <button
                 onClick={cargarUsuarios}
-                className="bg-primary hover:bg-primary/80 text-white text-xs px-3 py-1.5 rounded-xl transition"
+                className="bg-primary hover:bg-primary/80 text-white text-xs px-3 py-1.5 rounded-xl transition cursor-pointer"
               >
                 Buscar
               </button>
@@ -266,7 +307,7 @@ export default function AdminPanel({ token, onVolver }) {
                       <td className="p-3 text-right">
                         <button
                           onClick={() => handleToggleSuspension(u.id, u.suspendido)}
-                          className={`px-3 py-1 rounded-lg text-xs font-medium transition ${
+                          className={`px-3 py-1 rounded-lg text-xs font-medium transition cursor-pointer ${
                             u.suspendido
                               ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30'
                               : 'bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/30'
@@ -284,13 +325,13 @@ export default function AdminPanel({ token, onVolver }) {
         </div>
       )}
 
-      {/* EVIDENCIA DE CHAT */}
-      {chatEvidencia && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      {/* MODAL DE EVIDENCIA DE CHAT */}
+      {chatEvidencia && createPortal(
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
           <div className="bg-card border border-white/10 rounded-2xl p-6 w-full max-w-lg relative shadow-2xl flex flex-col max-h-[80vh]">
             <button
               onClick={() => setChatEvidencia(null)}
-              className="absolute top-4 right-4 text-white/50 hover:text-white text-lg transition"
+              className="absolute top-4 right-4 text-white/50 hover:text-white text-lg transition cursor-pointer"
             >
               ✕
             </button>
@@ -300,29 +341,30 @@ export default function AdminPanel({ token, onVolver }) {
             </h3>
 
             <div className="flex-1 overflow-y-auto space-y-2 pr-2 my-2">
-              {chatEvidencia.map((msg, idx) => (
-                <div key={idx} className="bg-surface/80 border border-white/5 p-2.5 rounded-xl text-xs space-y-1">
+              {obtenerMensajesEvidencia(chatEvidencia).map((msg, idx) => (
+                <div key={idx} className="bg-surface/80 border border-white/5 p-3 rounded-xl text-xs space-y-1">
                   <div className="flex justify-between items-center text-[10px] text-white/40">
-                    <span className="font-bold text-primary">@{msg.emisor}</span>
-                    <span>
-                      {msg.fecha
-                        ? new Date(msg.fecha).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                        : ''}
-                    </span>
+                    <span className="font-bold text-primary">@{msg.emisor || msg.username || 'IA Moderación'}</span>
+                    {msg.fecha && (
+                      <span>
+                        {new Date(msg.fecha).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    )}
                   </div>
-                  <p className="text-white/90 text-xs">{msg.texto}</p>
+                  <p className="text-white/90 text-xs break-words">{msg.texto || msg.contenido || msg.mensaje || String(msg)}</p>
                 </div>
               ))}
             </div>
 
             <button
               onClick={() => setChatEvidencia(null)}
-              className="w-full bg-surface hover:bg-white/10 text-white text-xs py-2 rounded-xl transition mt-3 font-semibold"
+              className="w-full bg-surface hover:bg-white/10 text-white text-xs py-2 rounded-xl transition mt-3 font-semibold cursor-pointer"
             >
               Cerrar evidencia
             </button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

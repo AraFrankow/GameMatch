@@ -1,25 +1,72 @@
-const PALABRAS_TOXICAS = {
-  insulto: ['idiota', 'imbecil', 'estupido', 'estupida', 'inutil', 'basura', 'pedazo de mierda', 'sos un desastre', 'no sirves para nada', 'sos un inutil', 'andate a la mierda', 'la concha de tu madre', 'hijo de puta', 'hija de puta', 'pelotudo', 'pelotuda', 'boludo de mierda', 'forro', 'forra', 'asqueroso', 'asquerosa', 'sos un asco'],
-  acoso: ['te voy a encontrar', 'se donde vives', 'te voy a arruinar', 'nadie te quiere', 'deberias desaparecer', 'matate', 'suicidate', 'nadie te va a extrañar'],
-  discriminacion: ['muerete puto', 'de mierda por ser mujer', 'las mujeres no saben jugar', 'vuelvete a tu pais', 'gente como vos no deberia', 'discapacitado mental'],
-  amenaza: ['te voy a matar', 'te voy a pegar', 'te voy a cagar a trompadas', 'cuidate cuando salgas'],
-};
-const SEVERIDAD = { insulto: 0.6, acoso: 0.9, discriminacion: 0.85, amenaza: 0.95 };
-const normalizar = (texto) => texto.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-  .replace(/0/g, 'o').replace(/1/g, 'i').replace(/3/g, 'e').replace(/4/g, 'a').replace(/5/g, 's').replace(/@/g, 'a').replace(/\$/g, 's');
-const analizarToxicidad = (texto) => {
-  const normalizado = normalizar(texto);
-  let scoreMax = 0, categoriaDetectada = null;
-  for (const [categoria, palabras] of Object.entries(PALABRAS_TOXICAS)) {
-    for (const palabra of palabras) {
-      if (normalizado.includes(normalizar(palabra))) {
-        const score = SEVERIDAD[categoria];
-        if (score > scoreMax) { scoreMax = score; categoriaDetectada = categoria; }
-      }
-    }
+require('dotenv').config();
+const Groq = require('groq-sdk');
+const Filter = require('bad-words-es');
+const { Reporte } = require('../models');
+
+const filter = new Filter();
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
+const MODISMOS_GAMING = [
+  'boludo', 'boluda', 'pelotudo', 'pelotuda', 'manco', 'manca', 
+  'pt', 'trolo', 'trola', 'forro', 'forra', 'concha', 'lpm', 
+  'puto', 'puta', 'cago', 'mierda', 'repario'
+];
+
+const censurarConAPI = async (texto, emisorId = null) => {
+  if (!texto || !texto.trim()) return texto;
+
+  // 1. FILTRO LOCAL
+  let textoCensurado = texto;
+  try {
+    textoCensurado = filter.clean(texto);
+  } catch (err) {
+    console.error('Error en filtro local bad-words-es:', err.message);
   }
-  return { score: scoreMax, categoria: categoriaDetectada };
+
+  MODISMOS_GAMING.forEach((palabra) => {
+    const regex = new RegExp(`\\b${palabra}\\b`, 'gi');
+    textoCensurado = textoCensurado.replace(regex, (match) => '*'.repeat(match.length));
+  });
+
+  // 2. FILTRO DE IA (GROQ)
+  try {
+    const respuesta = await groq.chat.completions.create({
+      model: 'openai/gpt-oss-20b',
+      temperature: 0,
+      messages: [
+        {
+          role: 'system',
+          content: 'Eres un moderador de chat de videojuegos. Si el mensaje contiene acoso grave, amenazas de muerte o doxxing responde "UNSAFE". De lo contrario responde "SAFE".'
+        },
+        { role: 'user', content: texto }
+      ]
+    });
+
+    const resultadoIA = respuesta.choices?.[0]?.message?.content?.trim();
+    console.log(`🤖 IA Moderación: "${texto}" -> [${resultadoIA}]`);
+
+    if (resultadoIA && resultadoIA.toUpperCase().includes('UNSAFE')) {
+      if (emisorId) {
+        await Reporte.create({
+          reportador_id: 1,
+          reportado_id: emisorId,
+          motivo: 'Toxicidad grave / Amenazas (IA)',
+          comentario: `Detectado por IA: "${texto}"`,
+          descripcion: texto,
+          evidencia_chat: texto,
+          estado: 'PENDIENTE'
+        }).catch(err => console.error('Error al guardar reporte automático:', err.message));
+      }
+
+      return "[Mensaje bloqueado por comportamiento tóxico]";
+    }
+
+    return textoCensurado;
+
+  } catch (err) {
+    console.error('Error en la API de Groq:', err.message);
+    return textoCensurado;
+  }
 };
-const UMBRAL_NORMAL = 0.6, UMBRAL_CON_MENOR = 0.4;
-const superaUmbral = (score, hayMenorEnConversacion) => score >= (hayMenorEnConversacion ? UMBRAL_CON_MENOR : UMBRAL_NORMAL);
-module.exports = { analizarToxicidad, superaUmbral, UMBRAL_NORMAL, UMBRAL_CON_MENOR };
+
+module.exports = { censurarConAPI };

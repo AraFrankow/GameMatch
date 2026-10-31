@@ -43,6 +43,11 @@ const Usuario = sequelize.define('Usuario', {
     type: DataTypes.BOOLEAN,
     defaultValue: false,
   },
+  suspendidoHasta: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    defaultValue: null
+  },
 }, {
   tableName: 'usuarios',
   timestamps: true,

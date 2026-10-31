@@ -1,6 +1,6 @@
 const { verificarToken } = require('../utils/jwt');
 const { Usuario, Mensaje, SalaParticipante } = require('../models');
-const { analizarToxicidad, superaUmbral } = require('../utils/moderacion');
+const { censurarConAPI } = require('../utils/moderacion');
 
 const usuariosVozPorSala = new Map();
 
@@ -18,10 +18,17 @@ const registrarChatSocket = (io) => {
       const payload = verificarToken(token);
       const usuario = await Usuario.findByPk(payload.id);
       if (!usuario) return next(new Error('Usuario no encontrado'));
+
+      if (usuario.suspendidoHasta && new Date(usuario.suspendidoHasta) > new Date()) {
+        return next(new Error('Cuenta suspendida'));
+      }
       if (usuario.suspendido) return next(new Error('Cuenta suspendida'));
+
       socket.usuario = usuario;
       next();
-    } catch (err) { next(new Error('Token invalido')); }
+    } catch (err) { 
+      next(new Error('Token invalido')); 
+    }
   });
 
   io.on('connection', async (socket) => {
@@ -112,6 +119,16 @@ const registrarChatSocket = (io) => {
           return socket.emit('error_chat', { error: 'Usuario no encontrado' });
         }
 
+        if (usuarioDB.suspendidoHasta && new Date(usuarioDB.suspendidoHasta) > new Date()) {
+          const fechaFin = new Date(usuarioDB.suspendidoHasta).toLocaleString('es-AR', {
+            dateStyle: 'medium',
+            timeStyle: 'short'
+          });
+          return socket.emit('error_chat', {
+            error: `Tu cuenta está suspendida hasta el ${fechaFin}`
+          });
+        }
+
         socket.usuario = usuarioDB;
 
         if (!contenido || !contenido.trim()) return socket.emit('error_chat', { error: 'El mensaje no puede estar vacío' });
@@ -125,15 +142,14 @@ const registrarChatSocket = (io) => {
         const esPart = participantes.some((p) => Number(p.usuario_id) === Number(uid));
         if (!esPart) return socket.emit('error_chat', { error: 'No sos participante de esta sala' });
 
-        const hayMenor = participantes.some((p) => p.usuario?.rango_edad === 'menor_18');
-        const { score, categoria } = analizarToxicidad(contenido);
-        const bloqueado = superaUmbral(score, hayMenor);
+        const contenidoCensurado = await censurarConAPI(contenido, uid);
 
-        const mensaje = await Mensaje.create({ sala_id: sid, emisor_id: uid, contenido, bloqueado });
-
-        if (bloqueado) {
-          return socket.emit('mensaje_bloqueado', { error: 'Tu mensaje fue bloqueado por contener contenido inapropiado', categoria });
-        }
+        const mensaje = await Mensaje.create({ 
+          sala_id: sid, 
+          emisor_id: uid, 
+          contenido: contenidoCensurado, 
+          bloqueado: false 
+        });
 
         io.to(`sala_${sid}`).emit('mensaje_nuevo', {
           id: mensaje.id,

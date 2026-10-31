@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const http = require('http');
@@ -5,7 +6,6 @@ const path = require('path');
 const { Server } = require('socket.io');
 const session = require('express-session');
 const passport = require('passport');
-require('dotenv').config();
 
 require('./config/passportSteam');
 
@@ -22,8 +22,8 @@ const companeroRoutes = require('./routes/companeroRoutes');
 const partidaRoutes = require('./routes/partidaRoutes');
 const salaRoutes = require('./routes/salaRoutes');
 const integracionRoutes = require('./routes/integracionRoutes');
-const { registrarChatSocket } = require('./sockets/chatSocket');
 const stripeRoutes = require('./routes/stripeRoutes');
+const { registrarChatSocket } = require('./sockets/chatSocket');
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -39,14 +39,6 @@ const io = new Server(httpServer, {
 });
 
 app.set('io', io);
-
-io.on('connection', (socket) => {
-  socket.on('unirse_usuario', (usuarioId) => {
-    if (usuarioId) {
-      socket.join(`usuario_${usuarioId}`);
-    }
-  });
-});
 
 app.use(cors({
   origin: CLIENT_URL,
@@ -84,19 +76,26 @@ app.use('/api/companeros', companeroRoutes);
 app.use('/api/partidas', partidaRoutes);
 app.use('/api/salas', salaRoutes);
 app.use('/api/integraciones', integracionRoutes);
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api/stripe', stripeRoutes);
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 registrarChatSocket(io);
 
 app.get('/', (req, res) => res.json({ status: 'GameMatch API corriendo' }));
+
 app.use((req, res) => res.status(404).json({ error: 'Ruta no encontrada' }));
+
+app.use((err, req, res, next) => {
+  console.error('Error no capturado:', err.stack);
+  res.status(500).json({ error: 'Error interno del servidor' });
+});
 
 const PORT = process.env.PORT || 3000;
 
 const iniciar = async () => {
   try {
     await sequelize.authenticate();
+    await sequelize.sync({ alter: true });
     console.log('Conexión a la base de datos OK');
     httpServer.listen(PORT, () => console.log(`🚀 Servidor + WebSocket corriendo en puerto ${PORT}`));
   } catch (err) {

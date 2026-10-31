@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { authApi } from '../api';
+import { createPortal } from 'react-dom';
 
 export default function ModalReportarUsuario({ token, reportadoId, usernameReportado, onClose }) {
   const [motivo, setMotivo] = useState('Comportamiento tóxico');
@@ -33,12 +34,12 @@ export default function ModalReportarUsuario({ token, reportadoId, usernameRepor
     }
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+  return createPortal(
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
       <div className="bg-card border border-white/10 rounded-2xl p-6 w-full max-w-md relative shadow-2xl space-y-4">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-white/50 hover:text-white text-lg transition"
+          className="absolute top-4 right-4 text-white/50 hover:text-white text-lg transition cursor-pointer"
         >
           ✕
         </button>
@@ -66,7 +67,7 @@ export default function ModalReportarUsuario({ token, reportadoId, usernameRepor
               <select
                 value={motivo}
                 onChange={(e) => setMotivo(e.target.value)}
-                className="w-full bg-surface border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-primary"
+                className="w-full bg-surface border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-primary cursor-pointer"
               >
                 <option value="Comportamiento tóxico">Comportamiento tóxico</option>
                 <option value="Acoso o lenguaje ofensivo">Acoso o lenguaje ofensivo</option>
@@ -94,14 +95,14 @@ export default function ModalReportarUsuario({ token, reportadoId, usernameRepor
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 rounded-xl bg-surface hover:bg-white/10 text-xs font-medium text-white/70 transition"
+                className="px-4 py-2 rounded-xl bg-surface hover:bg-white/10 text-xs font-medium text-white/70 transition cursor-pointer"
               >
                 Cancelar
               </button>
               <button
                 type="submit"
                 disabled={enviando}
-                className="px-4 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-xs font-semibold text-white transition disabled:opacity-50"
+                className="px-4 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-xs font-semibold text-white transition disabled:opacity-50 cursor-pointer"
               >
                 {enviando ? 'Enviando...' : 'Enviar Reporte'}
               </button>
@@ -109,6 +110,7 @@ export default function ModalReportarUsuario({ token, reportadoId, usernameRepor
           </form>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
