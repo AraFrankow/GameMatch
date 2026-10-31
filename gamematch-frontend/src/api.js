@@ -32,6 +32,7 @@ export const authApi = {
     return fetch(`${API_URL}/api/busqueda?${params}`, { headers: authHeaders(token) }).then(manejarRespuesta);
   },
   juegos: (token) => fetch(`${API_URL}/api/juegos`, { headers: authHeaders(token) }).then(manejarRespuesta),
+  buscarUsuarios: (token, q = '') => fetch(`${API_URL}/api/usuarios?q=${encodeURIComponent(q)}`, { headers: authHeaders(token),}).then(manejarRespuesta),
 
   // ---- Bloqueos ----
   bloquear: (token, bloqueado_id) => fetch(`${API_URL}/api/bloqueos`, { method: 'POST', headers: jsonHeaders(token), body: JSON.stringify({ bloqueado_id }) }).then(manejarRespuesta),
@@ -50,7 +51,7 @@ export const authApi = {
   crearSala: (token, body) => fetch(`${API_URL}/api/salas`, { method: 'POST', headers: jsonHeaders(token), body: JSON.stringify(body) }).then(manejarRespuesta),
   misSalas: (token) => fetch(`${API_URL}/api/salas`, { headers: authHeaders(token) }).then(manejarRespuesta),
   misInvitaciones: (token) => fetch(`${API_URL}/api/salas/invitaciones`, { headers: authHeaders(token) }).then(manejarRespuesta),
-  invitarASala: (token, salaId, usuario_id) => fetch(`${API_URL}/api/salas/${salaId}/invitar`, { method: 'POST', headers: jsonHeaders(token), body: JSON.stringify({ usuario_id }) }).then(manejarRespuesta),
+  invitarASala: (token, salaId, datos) => fetch(`${API_URL}/api/salas/${salaId}/invitar`, { method: 'POST', headers: jsonHeaders(token), body: JSON.stringify(datos),}).then(manejarRespuesta),
   unirseASala: (token, salaId) => fetch(`${API_URL}/api/salas/${salaId}/unirse`, { method: 'POST', headers: authHeaders(token) }).then(manejarRespuesta),
   salirDeSala: (token, salaId) => fetch(`${API_URL}/api/salas/${salaId}/salir`, { method: 'POST', headers: authHeaders(token) }).then(manejarRespuesta),
   historialMensajes: (token, salaId) => fetch(`${API_URL}/api/salas/${salaId}/mensajes`, { headers: authHeaders(token) }).then(manejarRespuesta),

@@ -1,9 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const { verificarAuth } = require('../middleware/auth');
+const { Usuario } = require('../models');
 const { verificarEdadUsuario } = require('../controllers/verificacionController');
-const { obtenerPerfilPorId, obtenerPremiumDestacados, toggleSuspension, obtenerUsuarios } = require('../controllers/usuarioController');
 const calificacionController = require('../controllers/calificacionController');
+const { 
+  obtenerPerfilPorId, 
+  obtenerPremiumDestacados, 
+  toggleSuspension, 
+  obtenerUsuarios 
+} = require('../controllers/usuarioController');
 
 router.get('/', verificarAuth, obtenerUsuarios);
 router.post('/verificar-edad', verificarAuth, verificarEdadUsuario);
@@ -11,7 +17,7 @@ router.get('/premium-destacados', obtenerPremiumDestacados);
 router.get('/:id', verificarAuth, obtenerPerfilPorId);
 router.post('/:id/calificar', verificarAuth, calificacionController.calificarJugador);
 router.put('/:id/suspender', verificarAuth, toggleSuspension);
-router.post('/:id/suspender', async (req, res) => {
+router.post('/:id/suspender', verificarAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const { dias } = req.body;
@@ -44,14 +50,14 @@ router.post('/:id/suspender', async (req, res) => {
       sockets.forEach(socket => socket.disconnect(true));
     }
 
-    res.json({
+    return res.json({
       mensaje: `Usuario ${id} suspendido exitosamente.`,
       suspendidoHasta: fechaFin
     });
 
   } catch (error) {
     console.error('Error al suspender usuario:', error);
-    res.status(500).json({ error: 'Error interno al procesar la suspensión.' });
+    return res.status(500).json({ error: 'Error interno al procesar la suspensión.' });
   }
 });
 

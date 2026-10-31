@@ -124,8 +124,7 @@ const listarMisSalas = async (req, res) => {
 const invitar = async (req, res) => {
   try {
     const { id } = req.params;
-    const { usuario_id } = req.body;
-    const destId = Number(usuario_id);
+    const { username, usuario_id } = req.body;
 
     if (!(await SalaParticipante.findOne({ where: { sala_id: id, usuario_id: req.usuario.id } }))) {
       return res.status(403).json({ error: 'No sos participante de esta sala' });
@@ -140,8 +139,21 @@ const invitar = async (req, res) => {
       return res.status(400).json({ error: `La sala ya alcanzó el máximo de ${sala.max_participantes} participantes` });
     }
 
-    const invitado = await Usuario.findByPk(destId);
+    let invitado = null;
+    if (username && username.trim()) {
+      invitado = await Usuario.findOne({ where: { username: username.trim() } });
+    } else if (usuario_id) {
+      invitado = await Usuario.findByPk(Number(usuario_id));
+    } else {
+      return res.status(400).json({ error: 'Debés ingresar un nombre de usuario' });
+    }
+
     if (!invitado) return res.status(404).json({ error: 'Usuario a invitar no encontrado' });
+    const destId = invitado.id;
+
+    if (destId === req.usuario.id) {
+      return res.status(400).json({ error: 'No podés invitarte a vos mismo' });
+    }
 
     if (await SalaParticipante.findOne({ where: { sala_id: id, usuario_id: destId } })) {
       return res.status(409).json({ error: 'Ese usuario ya está en la sala' });
@@ -181,7 +193,10 @@ const invitar = async (req, res) => {
       io.to(`usuario_${destId}`).emit('notificacion:invitacion', payload);
     }
 
-    return res.status(201).json({ notificacion });
+    return res.status(201).json({ 
+      notificacion, 
+      mensaje: `Invitación enviada a @${invitado.username}` 
+    });
   } catch (err) { 
     console.error('Error en invitar:', err); 
     return res.status(500).json({ error: 'Error al invitar usuario' }); 

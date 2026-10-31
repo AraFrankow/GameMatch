@@ -1,9 +1,10 @@
 const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 const { OAuth2Client } = require('google-auth-library');
 const { Usuario, AuthGoogle } = require('../models');
 const { generarToken } = require('../utils/jwt');
 
-const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 const SALT_ROUNDS = 10;
 
 const verificarSuspension = (usuario) => {
@@ -61,13 +62,13 @@ const registro = async (req, res) => {
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
-    const mensajeSuspension = verificarSuspension(usuario);
     if (!email || !password) return res.status(400).json({ error: 'email y password son obligatorios' });
 
     const usuario = await Usuario.findOne({ where: { email } });
     if (!usuario || !usuario.password_hash) return res.status(401).json({ error: 'Credenciales inválidas' });
     if (!(await bcrypt.compare(password, usuario.password_hash))) return res.status(401).json({ error: 'Credenciales inválidas' });
 
+    const mensajeSuspension = verificarSuspension(usuario);
     if (mensajeSuspension) return res.status(403).json({ error: mensajeSuspension });
 
     const token = generarToken({ id: usuario.id, rol: usuario.rol });
@@ -81,38 +82,49 @@ const login = async (req, res) => {
 const googleAuth = async (req, res) => {
   try {
     const { id_token, rango_edad } = req.body;
-    if (!id_token) return res.status(400).json({ error: 'id_token de Google es obligatorio' });
 
-    const ticket = await googleClient.verifyIdToken({ idToken: id_token, audience: process.env.GOOGLE_CLIENT_ID });
-    const payload = ticket.getPayload();
-    const { sub: google_id, email, picture } = payload;
-    const mensajeSuspension = verificarSuspension(usuario);
-
-    let authGoogle = await AuthGoogle.findOne({ where: { google_id } });
-    let usuario;
-
-    if (authGoogle) {
-      usuario = await Usuario.findByPk(authGoogle.usuario_id);
-    } else {
-      usuario = await Usuario.findOne({ where: { email } });
-      if (!usuario) {
-        if (!rango_edad) {
-          return res.status(422).json({ requiereRangoEdad: true, error: 'Falta rango_edad para crear la cuenta', datosGoogle: { email, picture } });
-        }
-        const baseUsername = email.split('@')[0];
-        const uniqueUsername = `${baseUsername}_${Date.now().toString().slice(-4)}`;
-        usuario = await Usuario.create({ username: uniqueUsername, email, password_hash: null, foto_perfil: picture || null, rango_edad });
-      }
-      authGoogle = await AuthGoogle.create({ usuario_id: usuario.id, google_id, email_google: email });
+    if (!id_token) {
+      return res.status(400).json({ error: 'Se requiere id_token' });
     }
 
-    if (mensajeSuspension) return res.status(403).json({ error: mensajeSuspension });
+    const ticket = await client.verifyIdToken({
+      idToken: id_token,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
+    const { email, name, picture, sub } = payload;
 
-    const token = generarToken({ id: usuario.id, rol: usuario.rol });
-    return res.json({ usuario: usuarioPublico(usuario), token });
-  } catch (err) {
-    console.error('Error en googleAuth:', err);
-    return res.status(401).json({ error: 'Token de Google inválido' });
+    let usuario = await Usuario.findOne({ where: { email } });
+
+    if (!usuario) {
+      if (!rango_edad) {
+        return res.status(400).json({ error: 'rango_edad' });
+      }
+
+      usuario = await Usuario.create({
+        username: name.replace(/\s+/g, '').toLowerCase() + Math.floor(Math.random() * 1000),
+        email,
+        foto_perfil: picture,
+        rango_edad,
+        google_id: sub,
+      });
+    }
+
+    const mensajeSuspension = verificarSuspension(usuario);
+    if (mensajeSuspension) {
+      return res.status(403).json({ error: mensajeSuspension });
+    }
+
+    const token = jwt.sign(
+      { id: usuario.id, rol: usuario.rol || 'usuario' },
+      process.env.JWT_SECRET || 'secreto',
+      { expiresIn: '7d' }
+    );
+
+    return res.json({ token, usuario: usuarioPublico(usuario) });
+  } catch (error) {
+    console.error('Error en googleAuth:', error);
+    return res.status(401).json({ error: 'Token de Google inválido o fallo en autenticación.' });
   }
 };
 
@@ -153,9 +165,9 @@ const me = async (req, res) => {
     const usuario = await Usuario.findByPk(req.usuario.id, {
       include: ['steam', 'riot']
     });
-    const mensajeSuspension = verificarSuspension(usuario);
 
     if (!usuario) return res.status(404).json({ error: 'Usuario no encontrado' });
+    const mensajeSuspension = verificarSuspension(usuario);
     if (mensajeSuspension) return res.status(403).json({ error: mensajeSuspension });
 
     return res.json({ 

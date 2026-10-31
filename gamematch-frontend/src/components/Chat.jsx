@@ -20,7 +20,12 @@ export default function Chat({
   const [texto, setTexto] = useState('');
   const [error, setError] = useState('');
   const [avisoBloqueo, setAvisoBloqueo] = useState('');
-  const [nuevoParticipanteId, setNuevoParticipanteId] = useState('');
+
+  const [nuevoUsername, setNuevoUsername] = useState('');
+  const [sugerencias, setSugerencias] = useState([]);
+  const [buscandoSugerencias, setBuscandoSugerencias] = useState(false);
+  const dropdownRef = useRef(null);
+
   const [modalPerfilId, setModalPerfilId] = useState(null);
   const [modalMiembros, setModalMiembros] = useState(false);
 
@@ -50,6 +55,16 @@ export default function Chat({
       if (setSalaActivaId) setSalaActivaId(null);
     };
   }, [setSalaActivaId]);
+
+  useEffect(() => {
+    const handleClickAfuera = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setSugerencias([]);
+      }
+    };
+    document.addEventListener('mousedown', handleClickAfuera);
+    return () => document.removeEventListener('mousedown', handleClickAfuera);
+  }, []);
 
   const cargarSalas = useCallback(async () => {
     try {
@@ -114,6 +129,27 @@ export default function Chat({
     };
   }, [cargarSalas]);
 
+  const handleInputChange = async (val) => {
+    setNuevoUsername(val);
+    
+    if (!val.trim()) {
+      setSugerencias([]);
+      return;
+    }
+
+    setBuscandoSugerencias(true);
+    try {
+      const res = await authApi.buscarUsuarios(token, val.trim());
+      const lista = res.usuarios || [];
+      
+      setSugerencias(lista.filter((u) => u.id !== usuario.id));
+    } catch (err) {
+      console.error('Error al buscar sugerencias:', err);
+    } finally {
+      setBuscandoSugerencias(false);
+    }
+  };
+
   const entrarASala = async (sala) => {
     setError('');
     setErrorVoz('');
@@ -159,13 +195,14 @@ export default function Chat({
     }
   };
 
-  const invitar = async () => {
-    if (!nuevoParticipanteId || !salaActiva) return;
+  const invitar = async (targetUsername = nuevoUsername) => {
+    if (!targetUsername.trim() || !salaActiva) return;
     setError('');
     try {
-      await authApi.invitarASala(token, salaActiva.id, Number(nuevoParticipanteId));
-      setNuevoParticipanteId('');
-      alert('¡Invitación enviada correctamente!');
+      await authApi.invitarASala(token, salaActiva.id, { username: targetUsername.trim() });
+      setNuevoUsername('');
+      setSugerencias([]);
+      alert(`¡Invitación enviada correctamente a @${targetUsername.trim()}!`);
     } catch (err) {
       setError(err.message);
     }
@@ -188,11 +225,9 @@ export default function Chat({
       }))
     : [];
 
-  // Conexión a voz libre con advertencia previa para el usuario verificado
   const unirseAVoz = async () => {
     setErrorVoz('');
 
-    // Advertencia al verificado si hay un usuario sin verificar en la sala
     if (estaVerificado) {
       let haySinVerificar = false;
 
@@ -349,7 +384,7 @@ export default function Chat({
                     </button>
                     <button
                       onClick={salirDeGrupo}
-                      className="text-repRojo hover:bg-repRojo/10 border border-repRojo/30 text-xs rounded px-2 py-1 transition"
+                      className="text-repRojo hover:bg-repRojo/10 border border-repRojo/30 text-xs rounded px-2 py-1 transition cursor-pointer"
                       title="Salir de la sala"
                     >
                       Salir
@@ -379,14 +414,49 @@ export default function Chat({
               </div>
 
               {salaActiva.tipo === 'grupal' && (
-                <div className="flex gap-2">
-                  <input
-                    value={nuevoParticipanteId}
-                    onChange={(e) => setNuevoParticipanteId(e.target.value)}
-                    placeholder="id de usuario"
-                    className="bg-surface border border-white/10 rounded px-2 py-1 text-white text-xs w-24 outline-none focus:border-primary"
-                  />
-                  <button onClick={invitar} className="bg-surface hover:bg-white/10 text-white/80 text-xs rounded px-2 py-1">Invitar</button>
+                <div className="relative flex gap-2" ref={dropdownRef}>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={nuevoUsername}
+                      onChange={(e) => handleInputChange(e.target.value)}
+                      placeholder="Buscar usuario..."
+                      className="bg-surface border border-white/10 rounded px-2 py-1 text-white text-xs w-40 outline-none focus:border-primary"
+                    />
+
+                    {/* Desplegable de coincidencias */}
+                    {sugerencias.length > 0 && (
+                      <div className="absolute top-full left-0 mt-1 w-52 bg-card border border-white/10 rounded-xl shadow-2xl max-h-48 overflow-y-auto z-50 p-1">
+                        {sugerencias.map((u) => (
+                          <div
+                            key={u.id}
+                            onClick={() => {
+                              setNuevoUsername(u.username);
+                              setSugerencias([]);
+                              invitar(u.username);
+                            }}
+                            className="flex items-center gap-2 p-2 hover:bg-white/10 rounded-lg cursor-pointer transition"
+                          >
+                            <div className="w-6 h-6 rounded-full bg-surface flex items-center justify-center text-[10px] font-bold text-white overflow-hidden shrink-0">
+                              {u.foto_perfil ? (
+                                <img src={u.foto_perfil} alt="" className="w-full h-full object-cover" />
+                              ) : (
+                                (u.username?.[0] || 'U').toUpperCase()
+                              )}
+                            </div>
+                            <span className="text-xs text-white truncate font-medium">@{u.username}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <button 
+                    onClick={() => invitar()} 
+                    className="bg-surface hover:bg-white/10 text-white/80 text-xs rounded px-2 py-1 transition cursor-pointer"
+                  >
+                    Invitar
+                  </button>
                 </div>
               )}
 
@@ -402,17 +472,17 @@ export default function Chat({
                 {!enVoz ? (
                   <button 
                     onClick={unirseAVoz} 
-                    className="text-xs rounded-lg px-3 py-1.5 transition font-medium flex items-center gap-1.5 bg-repVerde/80 hover:bg-repVerde text-white"
+                    className="text-xs rounded-lg px-3 py-1.5 transition font-medium flex items-center gap-1.5 bg-repVerde/80 hover:bg-repVerde text-white cursor-pointer"
                   >
                     <span>Unirse a la llamada {usuariosEnVozSala.length > 0 ? `(${usuariosEnVozSala.length})` : ''}</span>
                   </button>
                 ) : (
                   <>
                     <span className="text-white/50 text-xs">{participantesVoz.length + 1} en voz</span>
-                    <button onClick={toggleMic} className="bg-surface hover:bg-white/10 text-white text-xs rounded-lg px-3 py-1.5 transition">
+                    <button onClick={toggleMic} className="bg-surface hover:bg-white/10 text-white text-xs rounded-lg px-3 py-1.5 transition cursor-pointer">
                       {micActivo ? 'Mic ON' : 'Mic OFF'}
                     </button>
-                    <button onClick={salirDeVoz} className="bg-repRojo/80 hover:bg-repRojo text-white text-xs rounded-lg px-3 py-1.5 transition">
+                    <button onClick={salirDeVoz} className="bg-repRojo/80 hover:bg-repRojo text-white text-xs rounded-lg px-3 py-1.5 transition cursor-pointer">
                       Salir de la llamada
                     </button>
                   </>
@@ -442,7 +512,7 @@ export default function Chat({
                 {onIrAVerificacion && (
                   <button
                     onClick={onIrAVerificacion}
-                    className="bg-primary hover:bg-primary/90 text-white font-semibold px-3 py-1 rounded-lg text-[11px] shrink-0 transition"
+                    className="bg-primary hover:bg-primary/90 text-white font-semibold px-3 py-1 rounded-lg text-[11px] shrink-0 transition cursor-pointer"
                   >
                     Verificar ahora
                   </button>
@@ -487,7 +557,7 @@ export default function Chat({
               />
               <button 
                 type="submit" 
-                className="bg-primary hover:bg-primary/90 text-white text-sm px-4 py-2 rounded-lg font-medium transition"
+                className="bg-primary hover:bg-primary/90 text-white text-sm px-4 py-2 rounded-lg font-medium transition cursor-pointer"
               >
                 Enviar
               </button>
@@ -502,7 +572,7 @@ export default function Chat({
           <div className="bg-card border border-white/10 rounded-2xl w-full max-w-sm p-4 shadow-2xl">
             <div className="flex items-center justify-between pb-3 mb-3 border-b border-white/10">
               <h3 className="text-white font-semibold text-sm">Miembros de la sala</h3>
-              <button onClick={() => setModalMiembros(false)} className="text-white/50 hover:text-white text-xs">✕</button>
+              <button onClick={() => setModalMiembros(false)} className="text-white/50 hover:text-white text-xs cursor-pointer">✕</button>
             </div>
 
             <div className="space-y-2 max-h-60 overflow-y-auto">
@@ -527,7 +597,7 @@ export default function Chat({
                         setModalMiembros(false);
                         setModalPerfilId(m.id);
                       }}
-                      className="text-[11px] bg-primary/20 hover:bg-primary text-primary hover:text-white px-2 py-1 rounded-lg transition"
+                      className="text-[11px] bg-primary/20 hover:bg-primary text-primary hover:text-white px-2 py-1 rounded-lg transition cursor-pointer"
                     >
                       Ver perfil
                     </button>
