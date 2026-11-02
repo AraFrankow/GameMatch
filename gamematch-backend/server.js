@@ -32,7 +32,7 @@ const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
 
 const io = new Server(httpServer, {
   cors: {
-    origin: CLIENT_URL,
+    origin: (origin, callback) => callback(null, true),
     methods: ['GET', 'POST'],
     credentials: true
   }
@@ -41,7 +41,7 @@ const io = new Server(httpServer, {
 app.set('io', io);
 
 app.use(cors({
-  origin: CLIENT_URL,
+  origin: (origin, callback) => callback(null, true),
   credentials: true
 }));
 
@@ -97,7 +97,10 @@ const iniciar = async () => {
     await sequelize.authenticate();
     await sequelize.sync({ alter: true });
     console.log('Conexión a la base de datos OK');
-    httpServer.listen(PORT, () => console.log(`🚀 Servidor + WebSocket corriendo en puerto ${PORT}`));
+    
+    httpServer.listen(PORT, '0.0.0.0', () => {
+      console.log(`🚀 Servidor + WebSocket corriendo en http://192.168.1.9:${PORT}`);
+    });
   } catch (err) {
     console.error('No se pudo conectar a la base de datos:', err.message);
     process.exit(1);
