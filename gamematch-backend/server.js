@@ -95,7 +95,6 @@ const PORT = process.env.PORT || 3000;
 const iniciar = async () => {
   try {
     await sequelize.authenticate();
-    await sequelize.sync({ alter: true });
     console.log('Conexión a la base de datos OK');
     
     httpServer.listen(PORT, '0.0.0.0', () => {

@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   FlatList,
   TextInput,
   TouchableOpacity,
@@ -13,15 +12,18 @@ import {
   Modal,
   Image,
   TouchableWithoutFeedback,
-  Keyboard
+  Keyboard,
+  BackHandler
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import tw from 'twrnc';
+
 import { salasApi } from '../api';
 import { storage } from '../services/storage';
 import { conectarSocket, obtenerSocket } from '../services/socket';
 import ModalPerfilUsuario from '../components/ModalPerfilUsuario';
 
-export default function SalasScreen({ route }) {
+export default function SalasScreen({ route, navigation }) {
   const targetUser = route?.params?.targetUser;
   const salaDirecta = route?.params?.salaDirecta;
 
@@ -38,20 +40,131 @@ export default function SalasScreen({ route }) {
   const [modalPerfilVisible, setModalPerfilVisible] = useState(false);
 
   const flatListRef = useRef(null);
+  const salaActivaRef = useRef(salaActiva);
+  const miUsuarioRef = useRef(miUsuario);
 
   useEffect(() => {
+    salaActivaRef.current = salaActiva;
+  }, [salaActiva]);
+
+  useEffect(() => {
+    miUsuarioRef.current = miUsuario;
+  }, [miUsuario]);
+
+  const normalizarSala = (s) => ({
+    ...s,
+    mensajes_sin_leer: Number(
+      s.mensajes_sin_leer ?? s.sin_leer ?? s.no_leidos ?? s.cant_sin_leer ?? s.unread_count ?? s.unread ?? 0
+    ),
+  });
+
+  useEffect(() => {
+    const totalSinLeer = salas.reduce((acc, s) => acc + Number(s.mensajes_sin_leer || 0), 0);
+
+    navigation.setOptions({
+      tabBarBadge: totalSinLeer > 0 ? (totalSinLeer > 99 ? '99+' : totalSinLeer) : undefined,
+      tabBarBadgeStyle: {
+        backgroundColor: '#6366f1',
+        color: '#ffffff',
+        fontSize: 10,
+        fontWeight: 'bold',
+      },
+    });
+  }, [salas, navigation]);
+
+  useEffect(() => {
+    const onBackPress = () => {
+      if (salaActiva) {
+        setSalaActiva(null);
+        return true;
+      }
+      return false;
+    };
+
+    const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => subscription.remove();
+  }, [salaActiva]);
+
+  useEffect(() => {
+    let socketInstancia = null;
+
+    const handleNuevoMensaje = (mensaje) => {
+      const activa = salaActivaRef.current;
+      const miUser = miUsuarioRef.current;
+      const miId = miUser?.id || miUser?.usuario?.id;
+      const emisorId = mensaje.emisor_id || mensaje.emisor?.id || mensaje.usuario_id;
+      const esMio = miId && Number(emisorId) === Number(miId);
+
+      if (activa && Number(mensaje.sala_id) === Number(activa.id)) {
+        setMensajes((prev) => {
+          if (prev.some((m) => m.id === mensaje.id)) return prev;
+          return [...prev, mensaje];
+        });
+      }
+
+      setSalas((prevSalas) =>
+        prevSalas.map((s) => {
+          if (Number(s.id) === Number(mensaje.sala_id)) {
+            const esLaSalaAbierta = activa && Number(activa.id) === Number(s.id);
+            const sinLeerActual = Number(s.mensajes_sin_leer || 0);
+
+            const nuevoSinLeer = (!esMio && !esLaSalaAbierta) ? sinLeerActual + 1 : (esLaSalaAbierta ? 0 : sinLeerActual);
+
+            return {
+              ...s,
+              ultimo_mensaje: mensaje.contenido,
+              updated_at: mensaje.createdAt || mensaje.created_at || new Date().toISOString(),
+              mensajes_sin_leer: nuevoSinLeer,
+            };
+          }
+          return s;
+        })
+      );
+    };
+
+    const handleErrorChat = (data) => {
+      Alert.alert('Chat', data.error || 'Ocurrió un error en la sala');
+    };
+
+    const handleSalaActualizada = () => {
+      cargarSalas();
+    };
+
     const inicializar = async () => {
       const user = await storage.obtener('usuario');
       setMiUsuario(user);
+      miUsuarioRef.current = user;
+
       await conectarSocket();
+      socketInstancia = obtenerSocket();
+
+      if (socketInstancia) {
+        socketInstancia.off('mensaje_nuevo', handleNuevoMensaje);
+        socketInstancia.off('error_chat', handleErrorChat);
+        socketInstancia.off('sala_actualizada', handleSalaActualizada);
+
+        socketInstancia.on('mensaje_nuevo', handleNuevoMensaje);
+        socketInstancia.on('error_chat', handleErrorChat);
+        socketInstancia.on('sala_actualizada', handleSalaActualizada);
+      }
+
       await cargarSalas();
     };
 
     inicializar();
+
+    return () => {
+      const socket = obtenerSocket();
+      if (socket) {
+        socket.off('mensaje_nuevo', handleNuevoMensaje);
+        socket.off('error_chat', handleErrorChat);
+        socket.off('sala_actualizada', handleSalaActualizada);
+      }
+    };
   }, []);
 
   useEffect(() => {
-    if (salas.length > 0) {
+    if (salas.length > 0 && (salaDirecta || targetUser)) {
       let salaASeleccionar = null;
 
       if (salaDirecta) {
@@ -65,117 +178,26 @@ export default function SalasScreen({ route }) {
         });
       }
 
-      if (salaASeleccionar && (!salaActiva || Number(salaActiva.id) !== Number(salaASeleccionar.id))) {
+      if (salaASeleccionar) {
         seleccionarSala(salaASeleccionar);
+        navigation.setParams({ salaDirecta: null, targetUser: null });
       }
     }
   }, [targetUser, salaDirecta, salas]);
-
-  useEffect(() => {
-    const socket = obtenerSocket();
-    if (!socket) return;
-
-    const handleNuevoMensaje = (mensaje) => {
-      if (salaActiva && Number(mensaje.sala_id) === Number(salaActiva.id)) {
-        setMensajes((prev) => {
-          if (prev.some((m) => m.id === mensaje.id)) return prev;
-          return [...prev, mensaje];
-        });
-      }
-    };
-
-    const handleErrorChat = (data) => {
-      Alert.alert('Chat', data.error || 'Ocurrió un error en la sala');
-    };
-
-    const handleSalaActualizada = () => {
-      cargarSalas();
-    };
-
-    socket.on('mensaje_nuevo', handleNuevoMensaje);
-    socket.on('error_chat', handleErrorChat);
-    socket.on('sala_actualizada', handleSalaActualizada);
-
-    return () => {
-      socket.off('mensaje_nuevo', handleNuevoMensaje);
-      socket.off('error_chat', handleErrorChat);
-      socket.off('sala_actualizada', handleSalaActualizada);
-    };
-  }, [salaActiva]);
-
-  const obtenerListaIntegrantes = (sala) => {
-    if (!sala) return [];
-    const rawLista =
-      sala.participantes ||
-      sala.usuarios ||
-      sala.Participantes ||
-      sala.Usuarios ||
-      sala.integrantes ||
-      [];
-
-    const map = new Map();
-    rawLista.forEach((p) => {
-      const uObj = p.usuario || p.Usuario || p;
-      const id = uObj.id || p.usuario_id || p.id;
-      if (id && !map.has(Number(id))) {
-        map.set(Number(id), {
-          id: Number(id),
-          username: uObj.username || uObj.nombre || p.username || 'Jugador',
-          foto_perfil:
-            uObj.foto_perfil ||
-            uObj.avatar ||
-            p.foto_perfil ||
-            p.avatar ||
-            'https://via.placeholder.com/150',
-          rango: uObj.rango || p.rango || 'Sin Rango'
-        });
-      }
-    });
-
-    return Array.from(map.values());
-  };
-
-  const obtenerNombreSala = (sala) => {
-    if (!sala) return 'Sala';
-    if (sala.nombre && sala.nombre.trim() !== '' && !sala.nombre.startsWith('Sala #')) {
-      return sala.nombre;
-    }
-
-    const integrantes = obtenerListaIntegrantes(sala);
-    const otros = integrantes.filter(
-      (p) => Number(p.id) !== Number(miUsuario?.id)
-    );
-
-    if (otros.length > 0) {
-      return otros.map((p) => p.username).join(', ');
-    }
-
-    return `Sala #${sala.id}`;
-  };
-
-  const handleAbrirPerfil = (usuarioId) => {
-    if (!usuarioId || Number(usuarioId) === Number(miUsuario?.id)) return;
-    setModalIntegrantesVisible(false);
-    setUsuarioSeleccionadoId(usuarioId);
-    setModalPerfilVisible(true);
-  };
 
   const cargarSalas = async () => {
     try {
       const data = await salasApi.listarMisSalas();
       const lista = Array.isArray(data) ? data : data.salas || [];
-      setSalas(lista);
+      const listaNormalizada = lista.map(normalizarSala);
+      setSalas(listaNormalizada);
 
-      setSalaActiva((prevActiva) => {
-        if (!prevActiva) {
-          if (lista.length > 0 && !salaDirecta && !targetUser) {
-            return lista[0];
-          }
-          return null;
-        }
-        const actualizada = lista.find((s) => Number(s.id) === Number(prevActiva.id));
-        return actualizada || prevActiva;
-      });
+      const socket = obtenerSocket();
+      if (socket && listaNormalizada.length > 0) {
+        listaNormalizada.forEach((s) => {
+          socket.emit('unirse_sala', { sala_id: s.id });
+        });
+      }
     } catch (error) {
       console.error('Error al cargar salas:', error);
     } finally {
@@ -189,6 +211,10 @@ export default function SalasScreen({ route }) {
     const salaCompleta = salas.find((s) => Number(s.id) === Number(sala.id)) || sala;
     setSalaActiva(salaCompleta);
     setCargandoMensajes(true);
+
+    setSalas((prev) =>
+      prev.map((s) => (Number(s.id) === Number(sala.id) ? { ...s, mensajes_sin_leer: 0 } : s))
+    );
 
     try {
       const socket = obtenerSocket();
@@ -222,217 +248,315 @@ export default function SalasScreen({ route }) {
     setNuevoMensaje('');
   };
 
-  const renderItemSala = ({ item }) => {
-    const esSeleccionada = salaActiva?.id === item.id;
-    const nombreMostrar = obtenerNombreSala(item);
+  const obtenerListaIntegrantes = (sala) => {
+    if (!sala) return [];
+    const rawLista =
+      sala.participantes ||
+      sala.usuarios ||
+      sala.Participantes ||
+      sala.Usuarios ||
+      sala.integrantes ||
+      [];
+
+    const map = new Map();
+    rawLista.forEach((p) => {
+      const uObj = p.usuario || p.Usuario || p;
+      const id = uObj.id || p.usuario_id || p.id;
+      if (id && !map.has(Number(id))) {
+        map.set(Number(id), {
+          id: Number(id),
+          username: uObj.username || uObj.nombre || p.username || 'Jugador',
+          foto_perfil:
+            uObj.foto_perfil ||
+            uObj.avatar ||
+            p.foto_perfil ||
+            p.avatar ||
+            'https://via.placeholder.com/150',
+          rango: uObj.rango || p.rango || 'Sin Rango'
+        });
+      }
+    });
+
+    return Array.from(map.values());
+  };
+
+  const obtenerDatosChat = (sala) => {
+    const miId = miUsuario?.id || miUsuario?.usuario?.id;
+    const integrantes = obtenerListaIntegrantes(sala);
+    const otros = integrantes.filter((p) => Number(p.id) !== Number(miId));
+    const esGrupo = sala?.tipo === 'grupal' || sala?.es_grupo || integrantes.length > 2;
+
+    if (!esGrupo && otros.length > 0) {
+      return {
+        nombre: otros[0].username,
+        avatar: otros[0].foto_perfil,
+        otroUsuarioId: otros[0].id,
+        esGrupo: false
+      };
+    }
+
+    return {
+      nombre: sala?.nombre && !sala.nombre.startsWith('Sala #') ? sala.nombre : `Grupo (${integrantes.length})`,
+      avatar: 'https://via.placeholder.com/150',
+      esGrupo: true
+    };
+  };
+
+  const formatearHora = (fechaIso) => {
+    if (!fechaIso) return '';
+    const fecha = new Date(fechaIso);
+    if (isNaN(fecha.getTime())) return '';
+    return fecha.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const handleAbrirPerfil = (usuarioId) => {
+    if (!usuarioId || Number(usuarioId) === Number(miUsuario?.id || miUsuario?.usuario?.id)) return;
+    setModalIntegrantesVisible(false);
+    setUsuarioSeleccionadoId(usuarioId);
+    setModalPerfilVisible(true);
+  };
+
+  const renderItemChatList = ({ item }) => {
+    const datos = obtenerDatosChat(item);
+    const sinLeer = Number(item.mensajes_sin_leer || 0);
 
     return (
       <TouchableOpacity
-        style={[styles.chipSala, esSeleccionada ? styles.chipSalaActiva : null]}
+        style={tw`flex-row items-center px-4 py-3.5 border-b border-white/5`}
+        activeOpacity={0.7}
         onPress={() => seleccionarSala(item)}
       >
-        <Ionicons
-          name="chatbubbles-outline"
-          size={16}
-          color={esSeleccionada ? '#fff' : '#94a3b8'}
-          style={{ marginRight: 6 }}
-        />
-        <Text style={[styles.textoChip, esSeleccionada ? styles.textoChipActivo : null]} numberOfLines={1}>
-          {nombreMostrar}
-        </Text>
+        <Image source={{ uri: datos.avatar }} style={tw`w-[52px] h-[52px] rounded-full bg-slate-700`} />
+
+        <View style={tw`flex-1 ml-3.5 justify-center`}>
+          <View style={tw`flex-row justify-between items-center`}>
+            <Text style={tw`text-base font-bold text-slate-100 flex-1 mr-2`} numberOfLines={1}>
+              {datos.nombre}
+            </Text>
+            {item.updated_at ? (
+              <Text style={tw.style('text-xs text-slate-500', sinLeer > 0 && 'text-indigo-500 font-bold')}>
+                {formatearHora(item.updated_at)}
+              </Text>
+            ) : null}
+          </View>
+
+          <View style={tw`flex-row justify-between items-center mt-1`}>
+            <Text style={tw`text-xs text-slate-400 flex-1 mr-2`} numberOfLines={1}>
+              {item.ultimo_mensaje || 'Tocá para ver la conversación'}
+            </Text>
+
+            {sinLeer > 0 ? (
+              <View style={tw`bg-indigo-500 rounded-full min-w-[22px] h-[22px] justify-center items-center px-1.5`}>
+                <Text style={tw`text-white text-[11px] font-bold`}>
+                  {sinLeer > 99 ? '99+' : sinLeer}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        </View>
       </TouchableOpacity>
     );
   };
 
   const renderMensaje = ({ item }) => {
     const emisorId = item.emisor_id || item.emisor?.id;
-    const esMio = Number(emisorId) === Number(miUsuario?.id);
+    const esMio = Number(emisorId) === Number(miUsuario?.id || miUsuario?.usuario?.id);
     const nombreEmisor = item.emisor?.username || item.usuario?.username;
 
     return (
-      <View style={[styles.burbujaContenedor, esMio ? styles.burbujaMia : styles.burbujaOtro]}>
-        <View style={[styles.burbuja, esMio ? styles.burbujaEstiloMia : styles.burbujaEstiloOtra]}>
+      <View style={tw.style('w-full flex-row mb-1', esMio ? 'justify-end' : 'justify-start')}>
+        <View
+          style={tw.style(
+            'max-w-[78%] p-3 rounded-2xl',
+            esMio ? 'bg-indigo-500 rounded-br-none' : 'bg-slate-800 rounded-bl-none'
+          )}
+        >
           {!esMio && nombreEmisor ? (
-            <Text style={styles.remitente}>{nombreEmisor}</Text>
+            <Text style={tw`text-indigo-300 text-[11px] font-bold mb-0.5`}>{nombreEmisor}</Text>
           ) : null}
-          <Text style={styles.textoMensaje}>{item.contenido || ''}</Text>
+          <Text style={tw`text-white text-sm`}>{item.contenido || ''}</Text>
         </View>
       </View>
     );
   };
 
-  const integrantes = obtenerListaIntegrantes(salaActiva);
-  const otrosIntegrantes = integrantes.filter(
-    (p) => Number(p.id) !== Number(miUsuario?.id)
-  );
+  if (salaActiva) {
+    const datosChatActivo = obtenerDatosChat(salaActiva);
+    const integrantes = obtenerListaIntegrantes(salaActiva);
 
-  const esGrupo =
-    salaActiva?.tipo === 'grupal' ||
-    salaActiva?.tipo === 'grupo' ||
-    salaActiva?.es_grupo === true ||
-    integrantes.length > 2;
+    return (
+      <KeyboardAvoidingView
+        style={tw`flex-1 bg-slate-900`}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={{ flex: 1 }}>
+            <View style={tw`flex-row items-center pt-12 px-3 pb-3 bg-slate-800 border-b border-white/10`}>
+              <TouchableOpacity
+                style={tw`p-2 mr-1`}
+                onPress={() => setSalaActiva(null)}
+              >
+                <Ionicons name="arrow-back" size={24} color="#fff" />
+              </TouchableOpacity>
 
-  const esChatUnoAUno = !esGrupo && (salaActiva?.tipo === 'privada' || otrosIntegrantes.length === 1);
-  const otroUsuario = otrosIntegrantes[0];
+              <TouchableOpacity
+                style={tw`flex-1 flex-row items-center`}
+                activeOpacity={0.7}
+                onPress={() => {
+                  if (datosChatActivo.esGrupo) {
+                    setModalIntegrantesVisible(true);
+                  } else if (datosChatActivo.otroUsuarioId) {
+                    handleAbrirPerfil(datosChatActivo.otroUsuarioId);
+                  }
+                }}
+              >
+                <Image source={{ uri: datosChatActivo.avatar }} style={tw`w-10 h-10 rounded-full bg-slate-700`} />
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <Text style={tw`text-base font-bold text-white`} numberOfLines={1}>
+                    {datosChatActivo.nombre}
+                  </Text>
+                  <Text style={tw`text-[11px] text-slate-400 mt-0.5`} numberOfLines={1}>
+                    {datosChatActivo.esGrupo
+                      ? `${integrantes.length} integrantes · Toca para ver`
+                      : 'Toca para ver perfil'}
+                  </Text>
+                </View>
+              </TouchableOpacity>
 
-  return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-    >
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <View style={{ flex: 1 }}>
-          <View style={styles.header}>
-            <Text style={styles.titulo}>Salas & Chat</Text>
-            {cargandoSalas ? (
-              <ActivityIndicator color="#6366f1" size="small" />
-            ) : (
-              <FlatList
-                horizontal
-                data={salas}
-                keyExtractor={(item) => item.id.toString()}
-                renderItem={renderItemSala}
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.listaSalasHorizontal}
-              />
-            )}
-          </View>
+              <TouchableOpacity
+                style={tw`p-2 bg-slate-900 rounded-xl ml-2`}
+                onPress={() => {
+                  if (datosChatActivo.esGrupo) {
+                    setModalIntegrantesVisible(true);
+                  } else if (datosChatActivo.otroUsuarioId) {
+                    handleAbrirPerfil(datosChatActivo.otroUsuarioId);
+                  }
+                }}
+              >
+                <Ionicons
+                  name={datosChatActivo.esGrupo ? 'people-outline' : 'person-outline'}
+                  size={22}
+                  color="#6366f1"
+                />
+              </TouchableOpacity>
+            </View>
 
-          {/* Encabezado dinámico según tipo de conversación */}
-          {salaActiva ? (
-            <View style={styles.barrasalaActiva}>
-              {esChatUnoAUno && otroUsuario ? (
-                <>
-                  <TouchableOpacity
-                    style={{ flex: 1 }}
-                    activeOpacity={0.7}
-                    onPress={() => handleAbrirPerfil(otroUsuario.id)}
-                  >
-                    <Text style={styles.tituloSalaActiva} numberOfLines={1}>
-                      {obtenerNombreSala(salaActiva)}
-                    </Text>
-                    <Text style={styles.subtituloSalaActiva}>
-                      Toca para ver perfil
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={styles.botonIntegrantes}
-                    onPress={() => handleAbrirPerfil(otroUsuario.id)}
-                  >
-                    <Ionicons name="person-outline" size={20} color="#6366f1" />
-                  </TouchableOpacity>
-                </>
+            <View style={tw`flex-1 px-3`}>
+              {cargandoMensajes ? (
+                <View style={tw`flex-1 justify-center items-center`}>
+                  <ActivityIndicator size="large" color="#6366f1" />
+                </View>
               ) : (
-                <>
-                  <TouchableOpacity
-                    style={{ flex: 1 }}
-                    activeOpacity={0.7}
-                    onPress={() => setModalIntegrantesVisible(true)}
-                  >
-                    <Text style={styles.tituloSalaActiva} numberOfLines={1}>
-                      {obtenerNombreSala(salaActiva)}
-                    </Text>
-                    <Text style={styles.subtituloSalaActiva}>
-                      {`${integrantes.length} ${integrantes.length === 1 ? 'integrante' : 'integrantes'} · Toca para ver integrantes`}
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={styles.botonIntegrantes}
-                    onPress={() => setModalIntegrantesVisible(true)}
-                  >
-                    <Ionicons name="people-outline" size={20} color="#6366f1" />
-                  </TouchableOpacity>
-                </>
+                <FlatList
+                  ref={flatListRef}
+                  data={mensajes}
+                  keyExtractor={(item, index) => item.id?.toString() || index.toString()}
+                  renderItem={renderMensaje}
+                  contentContainerStyle={tw.style('py-4', { gap: 10 })}
+                  onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+                />
               )}
             </View>
-          ) : null}
 
-          <View style={styles.chatArea}>
-            {cargandoMensajes ? (
-              <View style={styles.loaderCenter}>
-                <ActivityIndicator size="large" color="#6366f1" />
-              </View>
-            ) : !salaActiva ? (
-              <View style={styles.loaderCenter}>
-                <Ionicons name="chatbox-ellipses-outline" size={48} color="#64748b" />
-                <Text style={styles.textoVacio}>No tenés salas activas</Text>
-              </View>
-            ) : (
-              <FlatList
-                ref={flatListRef}
-                data={mensajes}
-                keyExtractor={(item, index) => item.id?.toString() || index.toString()}
-                renderItem={renderMensaje}
-                contentContainerStyle={styles.listaMensajes}
-                onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-              />
-            )}
-          </View>
-
-          {salaActiva ? (
-            <View style={styles.inputContainer}>
+            <View style={tw.style('flex-row items-center p-3 bg-slate-800 border-t border-white/10', { gap: 8 })}>
               <TextInput
-                style={styles.input}
+                style={tw`flex-1 bg-slate-900 rounded-full px-4 py-2.5 text-white text-sm`}
                 placeholder="Escribí un mensaje..."
                 placeholderTextColor="#64748b"
                 value={nuevoMensaje}
                 onChangeText={setNuevoMensaje}
               />
-              <TouchableOpacity style={styles.botonEnviar} onPress={handleEnviarMensaje}>
+              <TouchableOpacity style={tw`bg-indigo-500 w-[42px] h-[42px] rounded-full justify-center items-center`} onPress={handleEnviarMensaje}>
                 <Ionicons name="send" size={18} color="#fff" />
               </TouchableOpacity>
             </View>
-          ) : null}
-        </View>
-      </TouchableWithoutFeedback>
-
-      {/* MODAL DE INTEGRANTES*/}
-      <Modal visible={modalIntegrantesVisible} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitulo}>Integrantes del Grupo</Text>
-              <TouchableOpacity onPress={() => setModalIntegrantesVisible(false)}>
-                <Ionicons name="close-circle-outline" size={26} color="#64748b" />
-              </TouchableOpacity>
-            </View>
-
-            <FlatList
-              data={integrantes}
-              keyExtractor={(item) => item.id.toString()}
-              renderItem={({ item }) => {
-                const esMiUsuario = Number(item.id) === Number(miUsuario?.id);
-
-                return (
-                  <TouchableOpacity
-                    style={[styles.itemIntegrante, esMiUsuario ? { opacity: 0.7 } : null]}
-                    activeOpacity={esMiUsuario ? 1 : 0.7}
-                    disabled={esMiUsuario}
-                    onPress={() => handleAbrirPerfil(item.id)}
-                  >
-                    <Image source={{ uri: item.foto_perfil }} style={styles.avatarIntegrante} />
-                    <View style={{ flex: 1, marginLeft: 12 }}>
-                      <Text style={styles.nombreIntegrante}>{item.username}</Text>
-                      <Text style={styles.rangoIntegrante}>{`🏆 ${item.rango}`}</Text>
-                    </View>
-                    {esMiUsuario ? (
-                      <Text style={styles.badgeVos}>Tú</Text>
-                    ) : (
-                      <Ionicons name="person-circle-outline" size={22} color="#6366f1" />
-                    )}
-                  </TouchableOpacity>
-                );
-              }}
-              contentContainerStyle={{ gap: 10, paddingVertical: 10 }}
-            />
           </View>
-        </View>
-      </Modal>
+        </TouchableWithoutFeedback>
 
-      {/* MODAL DE PERFIL DE USUARIO */}
+        <Modal visible={modalIntegrantesVisible} transparent animationType="slide">
+          <View style={tw`flex-1 bg-black/70 justify-center p-5`}>
+            <View style={tw`bg-slate-800 rounded-2xl p-4.5 max-h-[70%] border border-white/10`}>
+              <View style={tw`flex-row justify-between items-center mb-3`}>
+                <Text style={tw`text-lg font-bold text-white`}>Integrantes del Grupo</Text>
+                <TouchableOpacity onPress={() => setModalIntegrantesVisible(false)}>
+                  <Ionicons name="close-circle-outline" size={26} color="#64748b" />
+                </TouchableOpacity>
+              </View>
+
+              <FlatList
+                data={integrantes}
+                keyExtractor={(item) => item.id.toString()}
+                renderItem={({ item }) => {
+                  const esMiUsuario = Number(item.id) === Number(miUsuario?.id || miUsuario?.usuario?.id);
+
+                  return (
+                    <TouchableOpacity
+                      style={tw.style('flex-row items-center bg-slate-900 p-2.5 rounded-xl border border-white/5', esMiUsuario && 'opacity-70')}
+                      activeOpacity={esMiUsuario ? 1 : 0.7}
+                      disabled={esMiUsuario}
+                      onPress={() => handleAbrirPerfil(item.id)}
+                    >
+                      <Image source={{ uri: item.foto_perfil }} style={tw`w-10 h-10 rounded-full bg-slate-700`} />
+                      <View style={{ flex: 1, marginLeft: 12 }}>
+                        <Text style={tw`text-white text-base font-semibold`}>{item.username}</Text>
+                        <Text style={tw`text-slate-400 text-xs mt-0.5`}>{`🏆 ${item.rango}`}</Text>
+                      </View>
+                      {esMiUsuario ? (
+                        <Text style={tw`bg-indigo-500 text-white text-[11px] font-bold px-2 py-1 rounded-md`}>Tú</Text>
+                      ) : (
+                        <Ionicons name="person-circle-outline" size={22} color="#6366f1" />
+                      )}
+                    </TouchableOpacity>
+                  );
+                }}
+                contentContainerStyle={{ gap: 10, paddingVertical: 10 }}
+              />
+            </View>
+          </View>
+        </Modal>
+
+        <ModalPerfilUsuario
+          visible={modalPerfilVisible}
+          usuarioId={usuarioSeleccionadoId}
+          usuarioActual={miUsuario}
+          onClose={() => setModalPerfilVisible(false)}
+          deshabilitarChat={true}
+          onIrAlChat={(salaNueva) => {
+            setModalPerfilVisible(false);
+            if (salaNueva) {
+              cargarSalas().then(() => seleccionarSala(salaNueva));
+            }
+          }}
+        />
+      </KeyboardAvoidingView>
+    );
+  }
+
+  return (
+    <View style={tw`flex-1 bg-slate-900`}>
+      <View style={tw`pt-14 px-5 pb-4 bg-slate-800 border-b border-white/10`}>
+        <Text style={tw`text-2xl font-bold text-white`}>Chats</Text>
+      </View>
+
+      {cargandoSalas ? (
+        <View style={tw`flex-1 justify-center items-center`}>
+          <ActivityIndicator size="large" color="#6366f1" />
+        </View>
+      ) : salas.length === 0 ? (
+        <View style={tw`flex-1 justify-center items-center`}>
+          <Ionicons name="chatbubbles-outline" size={54} color="#475569" />
+          <Text style={tw`text-slate-500 mt-3 text-base font-medium`}>No tenés conversaciones activas</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={salas}
+          keyExtractor={(item) => item.id.toString()}
+          renderItem={renderItemChatList}
+          contentContainerStyle={tw`py-1`}
+        />
+      )}
+
       <ModalPerfilUsuario
         visible={modalPerfilVisible}
         usuarioId={usuarioSeleccionadoId}
@@ -446,125 +570,6 @@ export default function SalasScreen({ route }) {
           }
         }}
       />
-    </KeyboardAvoidingView>
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f172a' },
-  header: { paddingTop: 50, paddingHorizontal: 16, paddingBottom: 12, backgroundColor: '#1e293b' },
-  titulo: { fontSize: 22, fontWeight: 'bold', color: '#fff', marginBottom: 12 },
-  listaSalasHorizontal: { gap: 8, paddingBottom: 4 },
-  chipSala: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#0f172a',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    maxWidth: 160,
-  },
-  chipSalaActiva: { backgroundColor: '#6366f1', borderColor: '#6366f1' },
-  textoChip: { color: '#94a3b8', fontSize: 13, fontWeight: '500' },
-  textoChipActivo: { color: '#fff', fontWeight: 'bold' },
-  barrasalaActiva: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1e293b',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.08)',
-  },
-  tituloSalaActiva: { fontSize: 16, fontWeight: 'bold', color: '#fff' },
-  subtituloSalaActiva: { fontSize: 12, color: '#94a3b8', marginTop: 2 },
-  botonIntegrantes: {
-    backgroundColor: '#0f172a',
-    padding: 8,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
-  chatArea: { flex: 1, paddingHorizontal: 12 },
-  loaderCenter: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  textoVacio: { color: '#64748b', marginTop: 8, fontSize: 14 },
-  listaMensajes: { paddingVertical: 16, gap: 10 },
-  burbujaContenedor: { width: '100%', flexDirection: 'row', marginBottom: 4 },
-  burbujaMia: { justifyContent: 'flex-end' },
-  burbujaOtro: { justifyContent: 'flex-start' },
-  burbuja: { maxWidth: '78%', padding: 12, borderRadius: 16 },
-  burbujaEstiloMia: { backgroundColor: '#6366f1', borderBottomRightRadius: 2 },
-  burbujaEstiloOtra: { backgroundColor: '#1e293b', borderBottomLeftRadius: 2 },
-  remitente: { color: '#a5b4fc', fontSize: 11, fontWeight: 'bold', marginBottom: 2 },
-  textoMensaje: { color: '#fff', fontSize: 14 },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    backgroundColor: '#1e293b',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.08)',
-    gap: 8,
-  },
-  input: {
-    flex: 1,
-    backgroundColor: '#0f172a',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    color: '#fff',
-    fontSize: 14,
-  },
-  botonEnviar: {
-    backgroundColor: '#6366f1',
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  modalContent: {
-    backgroundColor: '#1e293b',
-    borderRadius: 16,
-    padding: 18,
-    maxHeight: '70%',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  modalTitulo: { fontSize: 18, fontWeight: 'bold', color: '#fff' },
-  itemIntegrante: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#0f172a',
-    padding: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-  },
-  avatarIntegrante: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#334155' },
-  nombreIntegrante: { color: '#fff', fontSize: 15, fontWeight: '600' },
-  rangoIntegrante: { color: '#94a3b8', fontSize: 12, marginTop: 2 },
-  badgeVos: {
-    backgroundColor: '#6366f1',
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: 'bold',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-});

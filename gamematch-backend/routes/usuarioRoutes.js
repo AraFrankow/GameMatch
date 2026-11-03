@@ -14,6 +14,28 @@ const {
 router.get('/', verificarAuth, obtenerUsuarios);
 router.post('/verificar-edad', verificarAuth, verificarEdadUsuario);
 router.get('/premium-destacados', obtenerPremiumDestacados);
+
+router.put('/push-token', verificarAuth, async (req, res) => {
+  try {
+    const { push_token } = req.body;
+    const usuarioId = req.usuario.id;
+
+    if (!push_token) {
+      return res.status(400).json({ error: 'El push_token es requerido' });
+    }
+
+    await Usuario.update(
+      { push_token },
+      { where: { id: usuarioId } }
+    );
+
+    return res.json({ mensaje: 'Push token actualizado correctamente' });
+  } catch (error) {
+    console.error('Error al actualizar push_token:', error);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
 router.get('/:id', verificarAuth, obtenerPerfilPorId);
 router.post('/:id/calificar', verificarAuth, calificacionController.calificarJugador);
 router.put('/:id/suspender', verificarAuth, toggleSuspension);

@@ -71,6 +71,10 @@ export const usuariosApi = {
     );
     return { interactuaron };
   },
+  actualizarPushToken: async (push_token) => {
+    const { data } = await api.put('/usuarios/push-token', { push_token });
+    return data;
+  },
 };
 
 export const salasApi = {

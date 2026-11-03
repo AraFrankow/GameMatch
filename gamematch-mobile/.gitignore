@@ -51,3 +51,5 @@ yarn-error.*
 # Backend uploads local folder
 uploads/*
 !uploads/.gitkeep
+
+google-services.json

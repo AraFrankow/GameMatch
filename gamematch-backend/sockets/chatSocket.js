@@ -1,7 +1,7 @@
 const { verificarToken } = require('../utils/jwt');
 const { Usuario, Mensaje, SalaParticipante } = require('../models');
 const { censurarConAPI } = require('../utils/moderacion');
-
+const { enviarNotificacionPush } = require('../services/pushService');
 const usuariosVozPorSala = new Map();
 
 const obtenerUsuariosVoz = (sala_id) => {
@@ -136,7 +136,11 @@ const registrarChatSocket = (io) => {
         const sid = Number(sala_id);
         const participantes = await SalaParticipante.findAll({
           where: { sala_id: sid },
-          include: [{ model: Usuario, as: 'usuario', attributes: ['id', 'rango_edad'] }]
+          include: [{ 
+            model: Usuario, 
+            as: 'usuario', 
+            attributes: ['id', 'username', 'push_token', 'rango_edad'] 
+          }]
         });
 
         const esPart = participantes.some((p) => Number(p.usuario_id) === Number(uid));
@@ -164,6 +168,21 @@ const registrarChatSocket = (io) => {
           },
           created_at: mensaje.createdAt || new Date()
         });
+
+        const otrosParticipantes = participantes.filter((p) => Number(p.usuario_id) !== Number(uid));
+
+        for (const p of otrosParticipantes) {
+          const otroUsuario = p.usuario;
+          if (otroUsuario && otroUsuario.push_token) {
+            enviarNotificacionPush(
+              otroUsuario.push_token,
+              usuarioDB.username,
+              contenidoCensurado,
+              sid
+            ).catch((err) => console.error('Error al enviar notificación push:', err));
+          }
+        }
+
       } catch (err) {
         console.error('Error en enviar_mensaje:', err);
         socket.emit('error_chat', { error: 'Error al enviar el mensaje' });

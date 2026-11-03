@@ -43,6 +43,11 @@ const Usuario = sequelize.define('Usuario', {
     type: DataTypes.BOOLEAN,
     defaultValue: false,
   },
+  push_token: {
+    type: DataTypes.STRING(255),
+    allowNull: true,
+    defaultValue: null
+  },
   suspendidoHasta: {
     type: DataTypes.DATE,
     allowNull: true,
