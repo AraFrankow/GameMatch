@@ -3,6 +3,7 @@ import { authApi } from '../api';
 import PanelFiltros from './PanelFiltros';
 import TarjetaJugador from './TarjetaJugador';
 import { createPortal } from 'react-dom';
+import { socket } from '../socket';
 
 export default function Busqueda({ token, usuario, onVerPerfil }) {
   const [jugadores, setJugadores] = useState([]);
@@ -11,7 +12,6 @@ export default function Busqueda({ token, usuario, onVerPerfil }) {
   const [error, setError] = useState('');
 
   const [reportandoId, setReportandoId] = useState(null);
-  const [motivoReporte, setMotivoReporte] = useState('');
   const [mensajeModal, setMensajeModal] = useState('');
   const [motivoSeleccionado, setMotivoSeleccionado] = useState('lenguaje_inapropiado');
   const [comentarioReporte, setComentarioReporte] = useState('');
@@ -54,6 +54,17 @@ export default function Busqueda({ token, usuario, onVerPerfil }) {
   useEffect(() => {
     handleBuscar();
     cargarDestacados();
+    const handleCambiarEstado = ({ usuario_id, estado }) => {
+      setJugadores((prev) =>
+        prev.map((j) => (Number(j.id) === Number(usuario_id) ? { ...j, estado } : j))
+      );
+    };
+
+    socket.on('usuario_estado_cambiado', handleCambiarEstado);
+
+    return () => {
+      socket.off('usuario_estado_cambiado', handleCambiarEstado);
+    };
   }, []);
 
   const handleBloquear = async (id, username) => {
@@ -107,7 +118,6 @@ export default function Busqueda({ token, usuario, onVerPerfil }) {
     <div className="w-full max-w-6xl mx-auto p-4 space-y-6 text-left">
       <h2 className="text-xl font-bold text-white">Buscar jugadores</h2>
 
-      {/* FILTROS ARRIBA */}
       <PanelFiltros
         filtros={filtros}
         setFiltros={setFiltros}
@@ -115,7 +125,6 @@ export default function Busqueda({ token, usuario, onVerPerfil }) {
         onBuscar={handleBuscar}
       />
 
-      {/* GRILLA DE JUGADORES ENCONTRADOS */}
       <div className="space-y-4">
         <div className="flex items-center justify-between border-b border-white/10 pb-2">
           <h3 className="text-sm font-bold text-white/90">Jugadores encontrados</h3>
@@ -151,7 +160,6 @@ export default function Busqueda({ token, usuario, onVerPerfil }) {
         )}
       </div>
 
-      {/* MODAL DE REPORTAR JUGADOR*/}
       {reportandoId && createPortal(
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
           <div className="bg-card border border-white/10 rounded-2xl p-6 w-full max-w-md relative shadow-2xl space-y-4">

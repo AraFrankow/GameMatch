@@ -53,6 +53,11 @@ const Usuario = sequelize.define('Usuario', {
     allowNull: true,
     defaultValue: null
   },
+  estado: {
+    type: DataTypes.ENUM('conectado', 'ausente', 'desconectado'),
+      defaultValue: 'desconectado',
+      allowNull: false
+  },
 }, {
   tableName: 'usuarios',
   timestamps: true,

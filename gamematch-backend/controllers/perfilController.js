@@ -5,7 +5,7 @@ const { calcularSinergiaDuo } = require('../utils/sinergia');
 
 const PLATAFORMAS_VALIDAS = ['pc', 'consola', 'mobile'];
 const MODOS_JUEGO_VALIDOS = ['competitivo', 'casual', 'ambos'];
-const ESTADOS_VALIDOS = ['disponible', 'ocupado', 'en_partida'];
+const ESTADOS_VALIDOS = ['conectado', 'ausente', 'desconectado'];
 const RANGOS_EDAD_VALIDOS = ['menor_18', '18_25', '26_35', '36_mas'];
 
 const construirPerfilCompleto = async (usuarioId) => {

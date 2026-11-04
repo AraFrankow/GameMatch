@@ -7,17 +7,15 @@ import ModalCalificarJugador from './ModalCalificarJugador';
 import EtiquetasDestacadas from './EtiquetasDestacadas';
 
 const ESTADO_COLOR = {
-  online: 'bg-emerald-500',
-  jugando: 'bg-purple-500',
+  conectado: 'bg-emerald-500',
   ausente: 'bg-amber-500',
-  offline: 'bg-white/30',
+  desconectado: 'bg-slate-500',
 };
 
 const ESTADO_LABEL = {
-  online: 'En línea',
-  jugando: 'Jugando',
+  conectado: 'Conectado',
   ausente: 'Ausente',
-  offline: 'Desconectado',
+  desconectado: 'Desconectado',
 };
 
 function InsigniasUsuario({ usuario }) {
@@ -30,7 +28,6 @@ function InsigniasUsuario({ usuario }) {
 
   return (
     <div className="flex items-center justify-center gap-1.5 flex-wrap my-2">
-      {/* 1. Adulto / Menor */}
       <span
         className={`text-[10px] px-2 py-0.5 rounded-md font-medium border ${
           esMenor
@@ -41,7 +38,6 @@ function InsigniasUsuario({ usuario }) {
         {labelEdad}
       </span>
 
-      {/* 2. Verificado */}
       {estaVerificado && (
         <span
           className="text-[10px] px-2 py-0.5 rounded-md font-medium bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 flex items-center gap-1"
@@ -51,7 +47,6 @@ function InsigniasUsuario({ usuario }) {
         </span>
       )}
 
-      {/* 3. Suscripto Premium */}
       {esPremium && (
         <span
           className="text-[10px] px-2 py-0.5 rounded-md font-medium bg-amber-500/10 text-amber-300 border border-amber-500/30 flex items-center gap-1"
@@ -157,16 +152,23 @@ export default function ModalPerfilUsuario({ token, usuarioId, usuarioActual, on
 
         {perfil && !cargando && (
           <div className="flex flex-col items-center text-center space-y-3">
-            <div
-              className={`w-20 h-20 rounded-full bg-surface overflow-hidden flex items-center justify-center text-2xl font-bold text-white border-2 ${
-                esPremiumPerfil ? 'border-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.3)]' : 'border-primary'
-              }`}
-            >
-              {perfil.foto_perfil ? (
-                <img src={perfil.foto_perfil} alt={perfil.username} className="w-full h-full object-cover" />
-              ) : (
-                perfil.username?.[0]?.toUpperCase()
-              )}
+            <div className="relative">
+              <div
+                className={`w-20 h-20 rounded-full bg-surface overflow-hidden flex items-center justify-center text-2xl font-bold text-white border-2 ${
+                  esPremiumPerfil ? 'border-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.3)]' : 'border-primary'
+                }`}
+              >
+                {perfil.foto_perfil ? (
+                  <img src={perfil.foto_perfil} alt={perfil.username} className="w-full h-full object-cover" />
+                ) : (
+                  perfil.username?.[0]?.toUpperCase()
+                )}
+              </div>
+              <span
+                className={`absolute bottom-0 right-0 w-4 h-4 rounded-full border-2 border-card ${
+                  ESTADO_COLOR[perfil.estado] || 'bg-slate-500'
+                }`}
+              />
             </div>
 
             <div className="w-full">
@@ -175,26 +177,23 @@ export default function ModalPerfilUsuario({ token, usuarioId, usuarioActual, on
               <InsigniasUsuario usuario={perfil} />
 
               <div className="flex items-center justify-center gap-1.5 text-xs text-white/50 mb-3">
-                <span className={`w-2 h-2 rounded-full ${ESTADO_COLOR[perfil.estado] || 'bg-white/30'}`} />
+                <span className={`w-2.5 h-2.5 rounded-full ${ESTADO_COLOR[perfil.estado] || 'bg-slate-500'}`} />
                 <span>{ESTADO_LABEL[perfil.estado] || 'Desconectado'}</span>
                 {perfil.reputacion_porcentaje !== null && perfil.reputacion_porcentaje !== undefined && (
                   <span className="font-semibold text-emerald-400">· {perfil.reputacion_porcentaje}% rep</span>
                 )}
               </div>
 
-              {/* BADGE DE SINERGIA */}
               {esUsuarioActualPremium && perfil && perfil.sinergia_porcentaje !== undefined && (
                 <BadgeSinergia porcentaje={perfil.sinergia_porcentaje} />
               )}
 
-              {/* ETIQUETAS DESTACADAS */}
               <EtiquetasDestacadas
                 porcentajeReputacion={perfil.reputacion_porcentaje}
                 etiquetas={perfil.desglose_etiquetas}
                 esUsuarioPremium={esUsuarioActualPremium}
               />
 
-              {/* PESTAÑAS Y PLATAFORMAS (RIOT / STEAM) */}
               <div className="w-full space-y-3 pt-2">
                 {(perfil.riot || perfil.steam) && (
                   <div className="flex gap-2 w-full bg-surface/50 p-1 rounded-xl border border-white/5">
@@ -226,7 +225,6 @@ export default function ModalPerfilUsuario({ token, usuarioId, usuarioActual, on
                   </div>
                 )}
 
-                {/* TARJETA SEGÚN PESTAÑA ACTIVA */}
                 {pestana === 'riot' && perfil.riot && (
                   <TarjetaRiot
                     riot={perfil.riot}
@@ -248,7 +246,6 @@ export default function ModalPerfilUsuario({ token, usuarioId, usuarioActual, on
               </div>
             </div>
 
-            {/* SECCIÓN DE ACCIONES DE CHAT / CALIFICACIÓN */}
             {!esPerfilMio && (
               <div className="flex flex-col w-full gap-2 pt-3 border-t border-white/5 mt-3">
                 {esEntornoDiferente ? (
@@ -288,7 +285,6 @@ export default function ModalPerfilUsuario({ token, usuarioId, usuarioActual, on
           </div>
         )}
 
-        {/* SUBMODAL DE CALIFICACIÓN */}
         {mostrarModalCalificar && perfil && (
           <ModalCalificarJugador
             token={token}

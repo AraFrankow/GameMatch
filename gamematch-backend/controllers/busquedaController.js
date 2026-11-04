@@ -41,6 +41,7 @@ const buscarCompaneros = async (req, res) => {
       rol_preferido,
       reputacion_min,
       juego_steam,
+      estado
     } = req.query;
 
     const whereUsuario = {
@@ -50,6 +51,9 @@ const buscarCompaneros = async (req, res) => {
 
     if (modo_juego) whereUsuario.modo_juego = modo_juego;
     if (rango_edad) whereUsuario.rango_edad = rango_edad;
+    if (estado) {
+      whereUsuario.estado = estado;
+    }
 
     if (juego_steam && juego_steam.trim() !== '') {
       const juegosCoincidentes = await Juego.findAll({

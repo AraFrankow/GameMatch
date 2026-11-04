@@ -68,10 +68,13 @@ export default function App() {
   const vistaRef = useRef(vista);
   const salaActivaIdRef = useRef(salaActivaId);
   const sesionRef = useRef(sesion);
+  
+  const estadoActualRef = useRef(sesion?.usuario?.estado || 'conectado');
 
   useEffect(() => { vistaRef.current = vista; }, [vista]);
   useEffect(() => { salaActivaIdRef.current = salaActivaId; }, [salaActivaId]);
   useEffect(() => { sesionRef.current = sesion; }, [sesion]);
+  useEffect(() => { estadoActualRef.current = sesion?.usuario?.estado || 'conectado'; }, [sesion?.usuario?.estado]);
 
   const totalMensajesNoLeidos = Object.values(mensajesNoLeidos).reduce((acc, curr) => acc + curr, 0);
 
@@ -84,11 +87,13 @@ export default function App() {
     const DIAS_EXPIRACION = 7;
     const tiempoExpiracion = Date.now() + DIAS_EXPIRACION * 24 * 60 * 60 * 1000;
 
+    const usuarioConectado = { ...usuario, estado: 'conectado' };
+
     localStorage.setItem('gm_token', token);
-    localStorage.setItem('gm_usuario', JSON.stringify(usuario));
+    localStorage.setItem('gm_usuario', JSON.stringify(usuarioConectado));
     localStorage.setItem('gm_expira', tiempoExpiracion.toString());
 
-    setSesion({ token, usuario });
+    setSesion({ token, usuario: usuarioConectado });
     setVista('busqueda');
     resetearFormulario();
   };
@@ -100,9 +105,13 @@ export default function App() {
       localStorage.setItem('gm_usuario', JSON.stringify(actualizada.usuario));
       return actualizada;
     });
+  };
 
-    socket.disconnect();
-    socket.connect();
+  const handleCambiarEstado = (nuevoEstado) => {
+    if (socket && socket.connected) {
+      socket.emit('cambiar_estado_manual', { estado: nuevoEstado });
+      handleActualizarUsuario({ estado: nuevoEstado });
+    }
   };
 
   const handleVerPerfil = (idUsuario) => {
@@ -175,32 +184,64 @@ export default function App() {
       socket.auth = { token: sesion.token };
       socket.connect();
 
-      const handleInvitacion = (data) => {
-        setNotificaciones((prev) => [data, ...prev.filter((n) => n.id !== data.id)]);
+      const handleConnect = () => {
+        socket.emit('cambiar_estado_manual', { estado: 'conectado' });
+        handleActualizarUsuario({ estado: 'conectado' });
       };
 
-      const handleMensajeNuevo = (msg) => {
-        const emisorId = msg.emisor_id || msg.emisor?.id;
-        const miId = sesionRef.current?.usuario?.id;
+      const handleInvitacion = (invitacion) => {
+        setNotificaciones((prev) => [invitacion, ...prev]);
+      };
 
-        if (emisorId === miId) return;
-
-        const msgSalaId = Number(msg.sala_id);
-
-        if (vistaRef.current === 'chat' && salaActivaIdRef.current === msgSalaId) {
-          return;
+      const handleMensajeNuevo = (data) => {
+        if (data.sala_id !== salaActivaIdRef.current || vistaRef.current !== 'chat') {
+          setMensajesNoLeidos((prev) => ({
+            ...prev,
+            [data.sala_id]: (prev[data.sala_id] || 0) + 1,
+          }));
         }
-
-        setMensajesNoLeidos((prev) => ({
-          ...prev,
-          [msgSalaId]: (prev[msgSalaId] || 0) + 1,
-        }));
       };
 
+      socket.on('connect', handleConnect);
       socket.on('notificacion:invitacion', handleInvitacion);
       socket.on('mensaje_nuevo', handleMensajeNuevo);
 
+      let recargandoPagina = false;
+      let timerVisibilidad = null;
+
+      const handleBeforeUnload = () => {
+        recargandoPagina = true;
+      };
+
+      const handleVisibilityChange = () => {
+        if (recargandoPagina) return;
+        
+        if (estadoActualRef.current === 'desconectado') return;
+
+        if (document.hidden) {
+          timerVisibilidad = setTimeout(() => {
+            if (socket.connected && document.hidden && estadoActualRef.current !== 'desconectado') {
+              socket.emit('cambiar_estado_manual', { estado: 'ausente' });
+              handleActualizarUsuario({ estado: 'ausente' });
+            }
+          }, 300);
+        } else {
+          if (timerVisibilidad) clearTimeout(timerVisibilidad);
+          if (socket.connected && estadoActualRef.current !== 'desconectado') {
+            socket.emit('cambiar_estado_manual', { estado: 'conectado' });
+            handleActualizarUsuario({ estado: 'conectado' });
+          }
+        }
+      };
+
+      window.addEventListener('beforeunload', handleBeforeUnload);
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+
       return () => {
+        if (timerVisibilidad) clearTimeout(timerVisibilidad);
+        window.removeEventListener('beforeunload', handleBeforeUnload);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        socket.off('connect', handleConnect);
         socket.off('notificacion:invitacion', handleInvitacion);
         socket.off('mensaje_nuevo', handleMensajeNuevo);
         socket.disconnect();
@@ -301,7 +342,11 @@ export default function App() {
   };
 
   const cerrarSesion = () => {
+    if (socket && socket.connected) {
+      socket.emit('cambiar_estado_manual', { estado: 'desconectado' });
+    }
     socket.disconnect();
+
     setSesion(null);
     setVista('landing');
     setSalaActivaId(null);
@@ -371,7 +416,6 @@ export default function App() {
                       </label>
                     )}
 
-                    {/* CARTEL DE ERROR*/}
                     {error && (
                       <div className={`text-xs rounded-xl p-3 mb-4 border ${
                         error.toLowerCase().includes('suspendid')
@@ -409,7 +453,8 @@ export default function App() {
     );
   }
 
-  // --- RENDERIZADO SI EL USUARIO SÍ TIENE SESIÓN ---
+  const estadoActual = sesion.usuario?.estado || 'conectado';
+
   return (
     <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
       <div className="min-h-screen bg-gm-gradient flex flex-col">
@@ -430,7 +475,22 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* BOTÓN ADMIN */}
+            <div className="flex items-center gap-1.5 bg-surface border border-white/10 px-2.5 py-1.5 rounded-xl text-xs">
+              <span className={`w-2.5 h-2.5 rounded-full ${
+                estadoActual === 'conectado' ? 'bg-green-500' :
+                estadoActual === 'ausente' ? 'bg-amber-500' : 'bg-slate-500'
+              }`} />
+              <select
+                value={estadoActual}
+                onChange={(e) => handleCambiarEstado(e.target.value)}
+                className="bg-transparent text-white text-xs outline-none cursor-pointer"
+              >
+                <option value="conectado" className="bg-slate-800 text-white">Conectado</option>
+                <option value="ausente" className="bg-slate-800 text-white">Ausente</option>
+                <option value="desconectado" className="bg-slate-800 text-white">Invisible</option>
+              </select>
+            </div>
+
             {sesion.usuario?.rol === 'admin' && (
               <button
                 onClick={() => setVista('admin')}
@@ -446,7 +506,6 @@ export default function App() {
               </button>
             )}
 
-            {/* BOTÓN USUARIOS BLOQUEADOS */}
             <button
               onClick={() => setMostrarBloqueados(true)}
               className="text-xs bg-surface/80 hover:bg-white/10 border border-white/10 text-white/80 hover:text-white px-2.5 py-1.5 rounded-xl transition flex items-center gap-1.5"

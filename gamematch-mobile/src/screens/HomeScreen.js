@@ -16,6 +16,7 @@ import tw from 'twrnc';
 
 import { storage } from '../services/storage';
 import { usuariosApi, salasApi } from '../api';
+import { obtenerSocket } from '../services/socket';
 import ModalPerfilUsuario from '../components/ModalPerfilUsuario';
 import PanelFiltros from '../components/PanelFiltros';
 
@@ -128,6 +129,21 @@ export default function HomeScreen({ navigation }) {
 
   useEffect(() => {
     cargarUsuarios();
+
+    const socket = obtenerSocket();
+    if (!socket) return;
+
+    const handleCambiarEstado = ({ usuario_id, estado }) => {
+      setUsuarios((prev) =>
+        prev.map((u) => (Number(u.id) === Number(usuario_id) ? { ...u, estado } : u))
+      );
+    };
+
+    socket.on('usuario_estado_cambiado', handleCambiarEstado);
+
+    return () => {
+      socket.off('usuario_estado_cambiado', handleCambiarEstado);
+    };
   }, []);
 
   const onRefresh = useCallback(() => {
@@ -309,7 +325,6 @@ export default function HomeScreen({ navigation }) {
           esJugadorPremium ? 'border-amber-500/40' : 'border-white/10'
         )}
       >
-        {/* INSIGNIA PREMIUM */}
         {esJugadorPremium && (
           <View style={tw`absolute -top-2.5 right-4 bg-amber-400 px-2 py-0.5 rounded-full z-10 flex-row items-center`}>
             <Text style={tw`text-slate-950 font-extrabold text-[9px] uppercase tracking-wider`}>
@@ -318,26 +333,40 @@ export default function HomeScreen({ navigation }) {
           </View>
         )}
 
-        {/* CABECERA: AVATAR, NOMBRE Y SINERGIA */}
+        {/* AVATAR CON SIMBOLo DE ESTADO, NOMBRE Y SINERGIA */}
         <TouchableOpacity
           activeOpacity={0.8}
           onPress={() => abrirPerfilUsuario(item.id)}
           style={tw`flex-row items-start justify-between mb-3`}
         >
           <View style={tw`flex-row items-center flex-1 mr-2`}>
-            <View
-              style={tw.style(
-                'w-12 h-12 rounded-full overflow-hidden border-2 bg-slate-700 justify-center items-center mr-3',
-                esJugadorPremium ? 'border-amber-400' : 'border-white/20'
-              )}
-            >
-              {avatarUri ? (
-                <Image source={{ uri: avatarUri }} style={tw`w-full h-full`} />
-              ) : (
-                <Text style={tw`font-bold text-white text-lg`}>
-                  {(item.username?.[0] || item.nombre?.[0] || 'U').toUpperCase()}
-                </Text>
-              )}
+            {/* AVATAR + INDICADOR DE ESTADO */}
+            <View style={tw`relative mr-3`}>
+              <View
+                style={tw.style(
+                  'w-12 h-12 rounded-full overflow-hidden border-2 bg-slate-700 justify-center items-center',
+                  esJugadorPremium ? 'border-amber-400' : 'border-white/20'
+                )}
+              >
+                {avatarUri ? (
+                  <Image source={{ uri: avatarUri }} style={tw`w-full h-full`} />
+                ) : (
+                  <Text style={tw`font-bold text-white text-lg`}>
+                    {(item.username?.[0] || item.nombre?.[0] || 'U').toUpperCase()}
+                  </Text>
+                )}
+              </View>
+
+              <View
+                style={tw.style(
+                  'absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full border-2 border-slate-800',
+                  item.estado === 'conectado'
+                    ? 'bg-green-500'
+                    : item.estado === 'ausente'
+                    ? 'bg-amber-500'
+                    : 'bg-slate-500'
+                )}
+              />
             </View>
 
             <View style={tw`flex-1`}>
@@ -373,7 +402,6 @@ export default function HomeScreen({ navigation }) {
 
         {/* CONTENEDOR DE CUENTAS VINCULADAS */}
         <View style={tw.style({ gap: 8 }, 'mb-3')}>
-          {/* RIOT */}
           {tieneRiot && (
             <View style={tw`bg-black/30 border border-white/5 rounded-xl p-2.5`}>
               <View style={tw`flex-row items-center justify-between`}>
@@ -410,7 +438,6 @@ export default function HomeScreen({ navigation }) {
             </View>
           )}
 
-          {/* STEAM */}
           {tieneSteam && (
             <View style={tw`bg-[#66c0f4]/10 border border-[#66c0f4]/20 rounded-xl p-2.5`}>
               <View style={tw`flex-row items-center justify-between`}>
@@ -452,7 +479,6 @@ export default function HomeScreen({ navigation }) {
             </View>
           )}
 
-          {/* SIN VINCULACIONES */}
           {!tieneRiot && !tieneSteam && (
             <View style={tw`bg-black/20 border border-white/5 rounded-xl p-2.5 flex-row items-center justify-center`}>
               <Text style={tw`text-[11px] text-slate-500`}>🎮 Sin cuentas de juego vinculadas</Text>
@@ -494,7 +520,6 @@ export default function HomeScreen({ navigation }) {
         <Text style={tw`text-2xl font-bold text-white`}>Buscar Dúo</Text>
         <Text style={tw`text-[13px] text-slate-400 mt-0.5 mb-3.5`}>Encontrá compañeros activos para jugar</Text>
 
-        {/* BARRA DE BÚSQUEDA Y BOTÓN DE FILTROS */}
         <View style={tw`flex-row items-center gap-2`}>
           <View style={tw`flex-1 flex-row items-center bg-slate-900 rounded-xl px-3 py-2 border border-white/10`}>
             <Ionicons name="search-outline" size={20} color="#64748b" style={tw`mr-2`} />
@@ -556,7 +581,6 @@ export default function HomeScreen({ navigation }) {
         />
       )}
 
-      {/* MODAL DE PERFIL DE USUARIO */}
       <ModalPerfilUsuario
         visible={modalPerfilVisible}
         usuarioId={usuarioPerfilId}
@@ -568,7 +592,6 @@ export default function HomeScreen({ navigation }) {
         }}
       />
 
-      {/* MODAL DE REPORTE */}
       <Modal visible={modalReporteVisible} transparent animationType="slide">
         <View style={tw`flex-1 bg-black/70 justify-center p-5`}>
           <View style={tw`bg-slate-800 rounded-2xl p-5 border border-white/10`}>

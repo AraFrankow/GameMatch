@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { createContext, useEffect, useRef, useState } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
+import { AppState } from 'react-native';
 import HomeScreen from '../screens/HomeScreen';
 import SalasScreen from '../screens/SalasScreen';
 import PerfilScreen from '../screens/PerfilScreen';
@@ -12,13 +12,23 @@ import { storage } from '../services/storage';
 import { conectarSocket, obtenerSocket } from '../services/socket';
 
 const Tab = createBottomTabNavigator();
+export const AuthContext = createContext();
 
 export default function MainTabNavigator({ usuario, onCerrarSesion }) {
   const insets = useSafeAreaInsets();
   const [totalSinLeer, setTotalSinLeer] = useState(0);
+  const [estadoUsuario, setEstadoUsuario] = useState(usuario?.estado || 'conectado');
+
+  const appStateRef = useRef(AppState.currentState);
+  const estadoUsuarioRef = useRef(estadoUsuario);
+
+  useEffect(() => {
+    estadoUsuarioRef.current = estadoUsuario;
+  }, [estadoUsuario]);
 
   useEffect(() => {
     let socketInstancia = null;
+    let appStateSubscription = null;
 
     const inicializarGlobal = async () => {
       const user = usuario || (await storage.obtener('usuario'));
@@ -49,6 +59,27 @@ export default function MainTabNavigator({ usuario, onCerrarSesion }) {
       }
 
       if (socketInstancia) {
+        if (estadoUsuarioRef.current !== 'desconectado') {
+          socketInstancia.emit('cambiar_estado_manual', { estado: 'conectado' });
+          setEstadoUsuario('conectado');
+        }
+
+        appStateSubscription = AppState.addEventListener('change', (nextAppState) => {
+          if (estadoUsuarioRef.current === 'desconectado') {
+            appStateRef.current = nextAppState;
+            return;
+          }
+
+          if (appStateRef.current.match(/inactive|background/) && nextAppState === 'active') {
+            socketInstancia.emit('cambiar_estado_manual', { estado: 'conectado' });
+            setEstadoUsuario('conectado');
+          } else if (nextAppState.match(/inactive|background/)) {
+            socketInstancia.emit('cambiar_estado_manual', { estado: 'ausente' });
+            setEstadoUsuario('ausente');
+          }
+          appStateRef.current = nextAppState;
+        });
+
         const handleNuevoMensajeGlobal = (mensaje) => {
           const miId = user?.id || user?.usuario?.id;
           const emisorId = mensaje.emisor_id || mensaje.emisor?.id || mensaje.usuario_id;
@@ -66,11 +97,20 @@ export default function MainTabNavigator({ usuario, onCerrarSesion }) {
     inicializarGlobal();
 
     return () => {
+      if (appStateSubscription) appStateSubscription.remove();
       if (socketInstancia) {
         socketInstancia.off('mensaje_nuevo');
       }
     };
   }, [usuario]);
+
+  const handleCambiarEstado = (nuevoEstado) => {
+    const socketInstancia = obtenerSocket();
+    if (socketInstancia) {
+      socketInstancia.emit('cambiar_estado_manual', { estado: nuevoEstado });
+      setEstadoUsuario(nuevoEstado);
+    }
+  };
 
   return (
     <Tab.Navigator
@@ -116,7 +156,15 @@ export default function MainTabNavigator({ usuario, onCerrarSesion }) {
         }}
       />
       <Tab.Screen name="Perfil">
-        {(props) => <PerfilScreen {...props} usuario={usuario} onCerrarSesion={onCerrarSesion} />}
+        {(props) => (
+          <PerfilScreen
+            {...props}
+            usuario={usuario}
+            estadoUsuario={estadoUsuario}
+            onCambiarEstado={handleCambiarEstado}
+            onCerrarSesion={onCerrarSesion}
+          />
+        )}
       </Tab.Screen>
     </Tab.Navigator>
   );
