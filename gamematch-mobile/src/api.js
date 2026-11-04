@@ -79,6 +79,14 @@ export const usuariosApi = {
     const { data } = await api.put('/usuarios/push-token', { push_token });
     return data;
   },
+  obtenerConfigNotificaciones: async () => {
+    const { data } = await api.get('/usuarios/notificaciones-config');
+    return data;
+  },
+  actualizarConfigNotificaciones: async (config) => {
+    const { data } = await api.put('/usuarios/notificaciones-config', config);
+    return data;
+  },
 };
 
 export const salasApi = {
@@ -151,6 +159,33 @@ export const authApi = {
   buscarJuegosSteam: async (arg1, arg2) => {
     const q = typeof arg2 === 'string' ? arg2 : typeof arg1 === 'string' ? arg1 : '';
     const { data } = await api.get(`/juegos/steam-autocomplete?q=${encodeURIComponent(q)}`);
+    return data;
+  },
+
+  guardarPushToken: async (push_token) => {
+    const { data } = await api.put('/usuarios/push-token', { push_token });
+    return data;
+  },
+  misInvitaciones: async () => {
+    const { data } = await api.get('/salas/invitaciones');
+    return data;
+  },
+
+  unirseASala: async (salaId) => {
+    const { data } = await api.post(`/salas/${salaId}/unirse`);
+    return data;
+  },
+
+  rechazarInvitacion: async (notifId) => {
+    const { data } = await api.delete(`/salas/invitaciones/${notifId}`);
+    return data;
+  },
+  obtenerConfigNotificaciones: async () => {
+    const { data } = await api.get('/usuarios/notificaciones-config');
+    return data;
+  },
+  actualizarConfigNotificaciones: async (config) => {
+    const { data } = await api.put('/usuarios/notificaciones-config', config);
     return data;
   },
 };

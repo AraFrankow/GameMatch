@@ -25,6 +25,7 @@ export default function Busqueda({ token, usuario, onVerPerfil }) {
     sinergia_min: '',
     rol_preferido: '',
     solo_premium: '',
+    solo_verificados: '',
   });
 
   const cargarDestacados = async () => {
@@ -111,6 +112,17 @@ export default function Busqueda({ token, usuario, onVerPerfil }) {
       );
       if (!esPremium) return false;
     }
+
+    if (filtros.solo_verificados === 'true') {
+      const esVerificado = Boolean(
+        j.verificado === true ||
+          j.verificado === 1 ||
+          j.verificado === '1' ||
+          j.verificado === 'true'
+      );
+      if (!esVerificado) return false;
+    }
+
     return true;
   });
 

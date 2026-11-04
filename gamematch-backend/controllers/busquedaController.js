@@ -41,7 +41,8 @@ const buscarCompaneros = async (req, res) => {
       rol_preferido,
       reputacion_min,
       juego_steam,
-      estado
+      estado,
+      solo_verificados
     } = req.query;
 
     const whereUsuario = {
@@ -176,6 +177,12 @@ const buscarCompaneros = async (req, res) => {
     }
 
     if (esPremium) {
+      if (solo_verificados === 'true' || solo_verificados === '1') {
+        resultados = resultados.filter((c) =>
+          Boolean(c.verificado === true || c.verificado === 1 || c.verificado === 'true' || c.verificado === '1')
+        );
+      }
+
       if (rango_lol) {
         const idxMin = RANGOS_ORDEN.indexOf(rango_lol.toUpperCase());
         if (idxMin !== -1) {

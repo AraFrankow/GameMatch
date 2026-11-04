@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { Sequelize, Op } = require('sequelize');
 const { RekognitionClient, DetectFacesCommand } = require('@aws-sdk/client-rekognition');
-const { Usuario, IntegracionRiot, IntegracionSteam, Sala, SalaParticipante, Reputacion, Calificacion } = require('../models');
+const { Usuario, IntegracionRiot, IntegracionSteam, Sala, SalaParticipante, Reputacion, Calificacion, ConfigNotificaciones } = require('../models');
 const { calcularSinergiaDuo } = require('../utils/sinergia');
 
 const rekognition = new RekognitionClient({
@@ -399,11 +399,71 @@ const obtenerUsuarios = async (req, res) => {
   }
 };
 
+const actualizarPushToken = async (req, res) => {
+  try {
+    const { push_token } = req.body;
+    if (!push_token) {
+      return res.status(400).json({ error: 'El campo push_token es requerido' });
+    }
+
+    await Usuario.update(
+      { push_token },
+      { where: { id: req.usuario.id } }
+    );
+
+    return res.json({ ok: true, mensaje: 'Token push actualizado correctamente' });
+  } catch (error) {
+    console.error('Error en actualizarPushToken:', error);
+    return res.status(500).json({ error: 'Error al actualizar el token push' });
+  }
+};
+
+const obtenerConfigNotificaciones = async (req, res) => {
+  try {
+    const usuario_id = req.usuario.id;
+    const [config] = await ConfigNotificaciones.findOrCreate({
+      where: { usuario_id },
+      defaults: { mensajes: true, invitaciones: true, sistema: true }
+    });
+    return res.json({ config });
+  } catch (error) {
+    console.error('Error al obtener configuración de notificaciones:', error);
+    return res.status(500).json({ error: 'Error al obtener preferencias' });
+  }
+};
+
+const actualizarConfigNotificaciones = async (req, res) => {
+  try {
+    const usuario_id = req.usuario.id;
+    const datos = req.body?.config || req.body || {};
+
+    const [config] = await ConfigNotificaciones.findOrCreate({
+      where: { usuario_id },
+      defaults: { mensajes: true, invitaciones: true, sistema: true }
+    });
+
+    const parseBool = (val) => val === true || val === 'true' || val === 1 || val === '1';
+
+    if (datos.mensajes !== undefined) config.mensajes = parseBool(datos.mensajes);
+    if (datos.invitaciones !== undefined) config.invitaciones = parseBool(datos.invitaciones);
+    if (datos.sistema !== undefined) config.sistema = parseBool(datos.sistema);
+
+    await config.save();
+    return res.json({ ok: true, config });
+  } catch (error) {
+    console.error('Error al actualizar configuración de notificaciones:', error);
+    return res.status(500).json({ error: 'Error al guardar preferencias' });
+  }
+};
+
 module.exports = { 
   eliminarCuenta,
   obtenerPerfilPorId,
   verificarCamara,
   obtenerPremiumDestacados,
   toggleSuspension,
-  obtenerUsuarios
+  obtenerUsuarios,
+  actualizarPushToken,
+  obtenerConfigNotificaciones,
+  actualizarConfigNotificaciones
 };

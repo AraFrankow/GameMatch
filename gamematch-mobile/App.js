@@ -4,10 +4,9 @@ import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
-import * as Notifications from 'expo-notifications';
 
 import { registrarNotificacionesPush } from './src/services/notifications';
-import { navigationRef, navegarASala } from './src/navigation/navigationRef';
+import { navigationRef } from './src/navigation/navigationRef';
 import LoginScreen from './src/screens/LoginScreen';
 import MainTabNavigator from './src/navigation/MainTabNavigator';
 import { storage } from './src/services/storage';
@@ -20,8 +19,6 @@ export default function App() {
   const [cargando, setCargando] = useState(true);
   
   const [isNavigationReady, setIsNavigationReady] = useState(false);
-
-  const lastResponse = Notifications.useLastNotificationResponse();
 
   useEffect(() => {
     verificarSesion();
@@ -64,26 +61,6 @@ export default function App() {
       registrarNotificacionesPush();
     }
   }, [token]);
-
-  useEffect(() => {
-    if (esExpoGo || !token || !isNavigationReady || !lastResponse) return;
-
-    const sala_id = lastResponse.notification.request.content.data?.sala_id;
-    if (sala_id) {
-      setTimeout(() => navegarASala(sala_id), 300);
-    }
-  }, [lastResponse, token, isNavigationReady]);
-
-  useEffect(() => {
-    if (esExpoGo || !token || !isNavigationReady) return;
-
-    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
-      const sala_id = response.notification.request.content.data?.sala_id;
-      if (sala_id) navegarASala(sala_id);
-    });
-
-    return () => subscription.remove();
-  }, [token, isNavigationReady]);
 
   if (cargando) {
     return (

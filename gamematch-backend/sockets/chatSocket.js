@@ -172,15 +172,19 @@ const registrarChatSocket = (io) => {
         const otrosParticipantes = participantes.filter((p) => Number(p.usuario_id) !== Number(uid));
 
         for (const p of otrosParticipantes) {
-          const otroUsuario = p.usuario;
-          if (otroUsuario && otroUsuario.push_token) {
-            enviarNotificacionPush(
-              otroUsuario.push_token,
-              usuarioDB.username,
-              contenidoCensurado,
-              sid
-            ).catch((err) => console.error('Error al enviar notificación push:', err));
-          }
+          enviarNotificacionPush({
+            usuarioIdTarget: p.usuario_id,
+            titulo: usuarioDB.username,
+            cuerpo: contenidoCensurado,
+            tipoNotif: 'mensaje_nuevo',
+            data: {
+              sala_id: sid,
+              tipo: 'mensaje_nuevo',
+              emisor_id: uid,
+              emisor_nombre: usuarioDB.username,
+              emisor_foto: usuarioDB.foto_perfil
+            }
+          }).catch((err) => console.error('Error al enviar notificación push:', err));
         }
 
       } catch (err) {

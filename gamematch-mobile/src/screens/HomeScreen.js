@@ -19,6 +19,7 @@ import { usuariosApi, salasApi } from '../api';
 import { obtenerSocket } from '../services/socket';
 import ModalPerfilUsuario from '../components/ModalPerfilUsuario';
 import PanelFiltros from '../components/PanelFiltros';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
 
@@ -61,12 +62,13 @@ function obtenerValorNumero(valor, fallback = null) {
   return fallback;
 }
 
-export default function HomeScreen({ navigation }) {
+export default function HomeScreen({ navigation, campanita }) {
   const [usuarios, setUsuarios] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [refrescando, setRefrescando] = useState(false);
   const [busqueda, setBusqueda] = useState('');
   const [mostrarFiltros, setMostrarFiltros] = useState(false);
+  const insets = useSafeAreaInsets();
 
   const [filtros, setFiltros] = useState({
     modo_juego: '',
@@ -77,6 +79,7 @@ export default function HomeScreen({ navigation }) {
     sinergia_min: '',
     rol_preferido: '',
     solo_premium: '',
+    solo_verificados: '',
   });
 
   const [miUsuario, setMiUsuario] = useState(null);
@@ -266,7 +269,17 @@ export default function HomeScreen({ navigation }) {
         user.es_premium === 'true'
     );
 
+    const esJugadorVerificado = Boolean(
+      user.verificado === true ||
+        user.verificado === 1 ||
+        user.verificado === '1' ||
+        user.verificado === 'true'
+    );
+
     if (filtros.solo_premium === 'true' && !esJugadorPremium) {
+      return false;
+    }
+    if (filtros.solo_verificados === 'true' && !esJugadorVerificado) {
       return false;
     }
 
@@ -333,14 +346,12 @@ export default function HomeScreen({ navigation }) {
           </View>
         )}
 
-        {/* AVATAR CON SIMBOLo DE ESTADO, NOMBRE Y SINERGIA */}
         <TouchableOpacity
           activeOpacity={0.8}
           onPress={() => abrirPerfilUsuario(item.id)}
           style={tw`flex-row items-start justify-between mb-3`}
         >
           <View style={tw`flex-row items-center flex-1 mr-2`}>
-            {/* AVATAR + INDICADOR DE ESTADO */}
             <View style={tw`relative mr-3`}>
               <View
                 style={tw.style(
@@ -400,7 +411,6 @@ export default function HomeScreen({ navigation }) {
           </View>
         </TouchableOpacity>
 
-        {/* CONTENEDOR DE CUENTAS VINCULADAS */}
         <View style={tw.style({ gap: 8 }, 'mb-3')}>
           {tieneRiot && (
             <View style={tw`bg-black/30 border border-white/5 rounded-xl p-2.5`}>
@@ -486,7 +496,6 @@ export default function HomeScreen({ navigation }) {
           )}
         </View>
 
-        {/* BOTONES DE ACCIÓN */}
         <View style={tw.style('flex-row items-center pt-2.5 border-t border-white/5', { gap: 8 })}>
           <TouchableOpacity
             style={tw`flex-1 bg-indigo-500 flex-row justify-center items-center py-2.5 rounded-xl`}
@@ -516,9 +525,14 @@ export default function HomeScreen({ navigation }) {
 
   return (
     <View style={tw`flex-1 bg-slate-900`}>
-      <View style={tw`pt-12 px-5 pb-4 bg-slate-800`}>
-        <Text style={tw`text-2xl font-bold text-white`}>Buscar Dúo</Text>
-        <Text style={tw`text-[13px] text-slate-400 mt-0.5 mb-3.5`}>Encontrá compañeros activos para jugar</Text>
+      <View style={[tw`px-5 pb-4 bg-slate-800 border-b border-white/10`, { paddingTop: insets.top + 12 }]}>
+        <View style={tw`flex-row items-center justify-between mb-3`}>
+          <View style={tw`flex-1 mr-2`}>
+            <Text style={tw`text-2xl font-bold text-white`}>Buscar Dúo</Text>
+            <Text style={tw`text-[13px] text-slate-400 mt-0.5`}>Encontrá compañeros activos para jugar</Text>
+          </View>
+          {campanita}
+        </View>
 
         <View style={tw`flex-row items-center gap-2`}>
           <View style={tw`flex-1 flex-row items-center bg-slate-900 rounded-xl px-3 py-2 border border-white/10`}>
@@ -551,6 +565,7 @@ export default function HomeScreen({ navigation }) {
         </View>
       </View>
 
+      {/* LISTADO DE JUGADORES */}
       {cargando ? (
         <View style={tw`flex-1 justify-center items-center`}>
           <ActivityIndicator size="large" color="#6366f1" />

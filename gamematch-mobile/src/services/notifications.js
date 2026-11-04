@@ -1,6 +1,5 @@
 import { Platform } from 'react-native';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
-import { usuariosApi } from '../api';
 
 const esExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
@@ -44,11 +43,10 @@ export async function registrarNotificacionesPush() {
 
     if (finalStatus !== 'granted') return null;
 
-    const tokenData = await Notifications.getExpoPushTokenAsync();
-    const token = tokenData.data;
+    const projectId = Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
+    const tokenData = await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : {});
 
-    await usuariosApi.actualizarPushToken(token);
-    return token;
+    return tokenData?.data || null;
   } catch (error) {
     console.log('Aviso notificaciones push:', error.message);
     return null;

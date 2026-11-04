@@ -79,6 +79,7 @@ export default function PanelFiltros({ filtros, setFiltros, esPremium, onBuscar 
       rol_preferido: '',
       reputacion_min: '',
       solo_premium: '',
+      solo_verificados: '',
     });
   };
 
@@ -164,7 +165,6 @@ export default function PanelFiltros({ filtros, setFiltros, esPremium, onBuscar 
             )}
           </div>
 
-          {/* DESPLEGABLE DE SUGERENCIAS FLOTANTE */}
           {mostrarSugerencias && sugerenciasJuegos.length > 0 && (
             <div className="absolute left-0 right-0 top-full mt-1 bg-surface border border-white/10 rounded-xl shadow-2xl z-30 max-h-48 overflow-y-auto">
               {sugerenciasJuegos.map((juego, index) => (
@@ -195,7 +195,26 @@ export default function PanelFiltros({ filtros, setFiltros, esPremium, onBuscar 
           )}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div>
+            <label className="block text-[11px] text-white/60 mb-1 font-medium truncate">Verificación</label>
+            <label
+              className={`flex items-center gap-2 bg-surface border border-white/10 rounded-xl px-3 py-2 text-xs text-white cursor-pointer select-none transition ${
+                !esPremium ? 'opacity-40 cursor-not-allowed' : 'hover:border-amber-400'
+              }`}
+            >
+              <input
+                type="checkbox"
+                name="solo_verificados"
+                disabled={!esPremium}
+                checked={filtros.solo_verificados === 'true'}
+                onChange={handleChange}
+                className="w-3.5 h-3.5 accent-amber-400 rounded cursor-pointer disabled:cursor-not-allowed"
+              />
+              <span className="truncate">Verificados</span>
+            </label>
+          </div>
+
           <div>
             <label className="block text-[11px] text-white/60 mb-1 font-medium truncate">Rango LoL Mínimo</label>
             <select

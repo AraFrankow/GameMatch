@@ -24,7 +24,7 @@ import ModalPerfilUsuario from '../components/ModalPerfilUsuario';
 
 const esVerdadero = (v) => v === true || v === 1 || v === '1' || v === 'true';
 
-export default function SalasScreen({ route, navigation }) {
+export default function SalasScreen({ route, navigation, campanita }) {
   const targetUser = route?.params?.targetUser;
   const salaDirecta = route?.params?.salaDirecta;
 
@@ -54,6 +54,18 @@ export default function SalasScreen({ route, navigation }) {
   useEffect(() => {
     miUsuarioRef.current = miUsuario;
   }, [miUsuario]);
+
+  useEffect(() => {
+    if (salaActiva && salas.length > 0) {
+      const encontrada = salas.find((s) => Number(s.id) === Number(salaActiva.id));
+      if (encontrada) {
+        setSalaActiva((prev) => ({
+          ...encontrada,
+          _targetUser: prev?._targetUser || prev?.emisor || encontrada._targetUser
+        }));
+      }
+    }
+  }, [salas]);
 
   const normalizarSala = (s) => ({
     ...s,
@@ -221,7 +233,7 @@ export default function SalasScreen({ route, navigation }) {
         });
       }
     } catch (error) {
-      console.error('Error al cargar salas:', error);
+      console.log('Error al cargar salas:', error?.message || error);
     } finally {
       setCargandoSalas(false);
     }
@@ -233,7 +245,7 @@ export default function SalasScreen({ route, navigation }) {
     const salaCompleta = salas.find((s) => Number(s.id) === Number(sala.id)) || sala;
     const salaConTarget = {
       ...salaCompleta,
-      _targetUser: sala._targetUser || salaCompleta._targetUser
+      _targetUser: sala._targetUser || salaCompleta._targetUser || sala.emisor
     };
 
     setSalaActiva(salaConTarget);
@@ -254,7 +266,11 @@ export default function SalasScreen({ route, navigation }) {
         setMensajes(Array.isArray(historial) ? historial : historial.mensajes || []);
       }
     } catch (error) {
-      console.error('Error al cargar historial de mensajes:', error);
+      if (error.response?.status === 403) {
+        setMensajes([]);
+      } else {
+        console.log('Aviso al cargar historial:', error?.message || error);
+      }
     } finally {
       setCargandoMensajes(false);
     }
@@ -275,7 +291,7 @@ export default function SalasScreen({ route, navigation }) {
       const miId = miUsuario?.id || miUsuario?.usuario?.id;
       setSugerencias(lista.filter((u) => Number(u.id) !== Number(miId)));
     } catch (err) {
-      console.error('Error al buscar usuarios:', err);
+      console.log('Error al buscar usuarios:', err?.message || err);
     } finally {
       setCargandoSugerencias(false);
     }
@@ -346,7 +362,7 @@ export default function SalasScreen({ route, navigation }) {
     const integrantes = obtenerListaIntegrantes(sala);
     const otros = integrantes.filter((p) => Number(p.id) !== Number(miId));
 
-    const targetObj = sala?._targetUser || otros[0];
+    const targetObj = sala?._targetUser || (otros.length > 0 ? otros[0] : sala?.emisor);
     const esGrupo = sala?.tipo === 'grupal' || sala?.es_grupo || (integrantes.length > 2 && !sala?._targetUser);
 
     if (!esGrupo && targetObj) {
@@ -462,7 +478,6 @@ export default function SalasScreen({ route, navigation }) {
           behavior="padding"
           keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
         >
-          {/* HEADER */}
           <View style={tw`flex-row items-center px-3 py-3 bg-slate-800 border-b border-white/10`}>
             <TouchableOpacity style={tw`p-2 mr-1`} onPress={() => setSalaActiva(null)}>
               <Ionicons name="arrow-back" size={24} color="#fff" />
@@ -561,7 +576,6 @@ export default function SalasScreen({ route, navigation }) {
             )}
           </View>
 
-          {/* INPUT DE MENSAJE FIJO AL PIE */}
           <View style={tw`flex-row items-center p-3 bg-slate-800 border-t border-white/10`}>
             <TextInput
               style={tw`flex-1 bg-slate-900 rounded-full px-4 py-2.5 text-white text-sm mr-2`}
@@ -650,7 +664,10 @@ export default function SalasScreen({ route, navigation }) {
   return (
     <SafeAreaView style={tw`flex-1 bg-slate-900`} edges={['top', 'left', 'right']}>
       <View style={tw`px-5 py-4 bg-slate-800 border-b border-white/10`}>
-        <Text style={tw`text-2xl font-bold text-white mb-3`}>Chats</Text>
+        <View style={tw`flex-row items-center justify-between mb-3`}>
+          <Text style={tw`text-2xl font-bold text-white`}>Chats</Text>
+          {campanita}
+        </View>
 
         <View style={tw`relative`}>
           <TextInput

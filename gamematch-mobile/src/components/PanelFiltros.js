@@ -121,6 +121,7 @@ export default function PanelFiltros({ filtros, setFiltros, esPremium, onBuscar 
       rol_preferido: '',
       reputacion_min: '',
       solo_premium: '',
+      solo_verificados: '',
     });
   };
 
@@ -243,7 +244,7 @@ export default function PanelFiltros({ filtros, setFiltros, esPremium, onBuscar 
 
       {/* FILTROS COMPETITIVOS AVANZADOS (PREMIUM) */}
       <View style={tw`pt-3 border-t border-white/10 mb-2`}>
-        <View style={tw`flex-row items-center justify-between mb-2`}>
+        <View style={tw`flex-row items-center justify-between mb-2.5`}>
           <Text style={tw`text-xs font-bold text-amber-400`}>
             ⭐ Filtros Competitivos Avanzados
           </Text>
@@ -253,6 +254,32 @@ export default function PanelFiltros({ filtros, setFiltros, esPremium, onBuscar 
             </View>
           )}
         </View>
+
+        <TouchableOpacity
+          activeOpacity={0.8}
+          disabled={!esPremium}
+          onPress={() => handleChange('solo_verificados', filtros.solo_verificados === 'true' ? '' : 'true')}
+          style={tw.style(
+            'flex-row items-center justify-between p-3 rounded-xl border mb-2.5',
+            filtros.solo_verificados === 'true'
+              ? 'bg-blue-500/20 border-blue-500/50'
+              : 'bg-slate-900 border-white/10',
+            !esPremium && 'opacity-40 bg-slate-900/50'
+          )}
+        >
+          <View style={tw`flex-row items-center`}>
+            <Text style={tw`text-sm mr-2`}>☑️</Text>
+            <Text style={tw`text-xs font-bold text-white`}>Mostrar solo usuarios verificados</Text>
+          </View>
+          <View
+            style={tw.style(
+              'w-5 h-5 rounded-full border items-center justify-center',
+              filtros.solo_verificados === 'true' ? 'bg-blue-500 border-blue-400' : 'border-slate-500'
+            )}
+          >
+            {filtros.solo_verificados === 'true' && <Ionicons name="checkmark" size={14} color="#ffffff" />}
+          </View>
+        </TouchableOpacity>
 
         {renderSelectField(
           'Rango LoL Mínimo',

@@ -1,6 +1,7 @@
 const { Sala, SalaParticipante, Usuario, Notificacion } = require('../models');
 const { existeBloqueoEntre } = require('./bloqueoController');
 const { Op } = require('sequelize');
+const { enviarNotificacionPush } = require('../services/pushService');
 
 const MAX_GRUPAL = 5;
 
@@ -35,7 +36,6 @@ const crearSala = async (req, res) => {
       if (!esSegregacionValida(req.usuario.rango_edad, otro.rango_edad)) {
         return res.status(403).json({ error: 'No se puede iniciar un chat entre un menor de edad y un adulto' });
       }
-
 
       const salasCreador = await SalaParticipante.findAll({ where: { usuario_id: creador_id } });
       const idsSalasCreador = salasCreador.map((s) => s.sala_id);
@@ -154,6 +154,8 @@ const invitar = async (req, res) => {
       return res.status(403).json({ error: 'No se puede invitar a un usuario del otro lado de la barrera de edad' });
     }
 
+    const nombreSala = sala.nombre || 'Sala grupal';
+
     const notificacion = await Notificacion.create({
       usuario_id: destId,
       tipo: 'invitacion_sala',
@@ -166,10 +168,18 @@ const invitar = async (req, res) => {
         id: notificacion.id,
         sala_id: Number(id),
         invitado_por: req.usuario.username,
-        nombre_sala: sala.nombre || 'Sala grupal'
+        nombre_sala: nombreSala
       };
       io.to(`usuario_${destId}`).emit('notificacion:invitacion', payload);
     }
+
+    await enviarNotificacionPush({
+      usuarioIdTarget: destId,
+      titulo: '🎮 Nueva Invitación a Sala',
+      cuerpo: `${req.usuario.username} te invitó a unirte a "${nombreSala}"`,
+      data: { sala_id: Number(id), tipo: 'invitacion' },
+      tipoNotif: 'invitacion_sala'
+    });
 
     return res.status(201).json({ 
       notificacion, 

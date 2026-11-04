@@ -4,6 +4,7 @@ const { verificarAuth } = require('../middleware/auth');
 const { Usuario } = require('../models');
 const { verificarEdadUsuario } = require('../controllers/verificacionController');
 const calificacionController = require('../controllers/calificacionController');
+const usuarioController = require('../controllers/usuarioController');
 const { 
   obtenerPerfilPorId, 
   obtenerPremiumDestacados, 
@@ -35,7 +36,9 @@ router.put('/push-token', verificarAuth, async (req, res) => {
     return res.status(500).json({ error: 'Error interno del servidor' });
   }
 });
-
+router.put('/push-token', verificarAuth, usuarioController.actualizarPushToken);
+router.get('/notificaciones-config', verificarAuth, usuarioController.obtenerConfigNotificaciones);
+router.put('/notificaciones-config', verificarAuth, usuarioController.actualizarConfigNotificaciones);
 router.get('/:id', verificarAuth, obtenerPerfilPorId);
 router.post('/:id/calificar', verificarAuth, calificacionController.calificarJugador);
 router.put('/:id/suspender', verificarAuth, toggleSuspension);
