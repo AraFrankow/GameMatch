@@ -1,315 +1,432 @@
 import React, { useState, useEffect } from 'react';
 import {
+  Modal,
   View,
   Text,
-  StyleSheet,
-  Modal,
-  TouchableOpacity,
   Image,
+  TouchableOpacity,
   ActivityIndicator,
   ScrollView,
   Alert
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { perfilApi, salasApi } from '../api';
+import tw from 'twrnc';
 
-const ESTADO_COLOR = {
-  online: '#10b981',
-  jugando: '#a855f7',
-  ausente: '#f59e0b',
-  offline: '#64748b'
+import { usuariosApi, salasApi } from '../api';
+
+const CONFIG_ROLES = {
+  TOP: { label: 'TOP', color: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30', icono: '🛡️' },
+  JUNGLE: { label: 'JUNGLA', color: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30', icono: '🌿' },
+  MID: { label: 'MID', color: 'bg-purple-500/20 text-purple-300 border-purple-500/30', icono: '⚡' },
+  MIDDLE: { label: 'MID', color: 'bg-purple-500/20 text-purple-300 border-purple-500/30', icono: '⚡' },
+  ADC: { label: 'ADC', color: 'bg-amber-500/20 text-amber-300 border-amber-500/30', icono: '🎯' },
+  BOT: { label: 'ADC', color: 'bg-amber-500/20 text-amber-300 border-amber-500/30', icono: '🎯' },
+  BOTTOM: { label: 'ADC', color: 'bg-amber-500/20 text-amber-300 border-amber-500/30', icono: '🎯' },
+  SUPPORT: { label: 'SUPPORT', color: 'bg-rose-500/20 text-rose-300 border-rose-500/30', icono: '💚' },
+  UTILITY: { label: 'SUPPORT', color: 'bg-rose-500/20 text-rose-300 border-rose-500/30', icono: '💚' },
+  ARAM: { label: 'ARAM', color: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30', icono: '❄️' },
+  ARENA: { label: 'ARENA', color: 'bg-amber-500/20 text-amber-300 border-amber-500/30', icono: '⚔️' },
 };
 
-const ESTADO_LABEL = {
-  online: 'En línea',
-  jugando: 'Jugando',
-  ausente: 'Ausente',
-  offline: 'Desconectado'
-};
+function parsearTopJuegos(topJuegos) {
+  if (!topJuegos) return [];
+  if (Array.isArray(topJuegos)) return topJuegos;
+  try {
+    const parsed = JSON.parse(topJuegos);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function obtenerValorNumero(valor, fallback = null) {
+  if (valor === null || valor === undefined) return fallback;
+  if (typeof valor === 'number' || typeof valor === 'string') return valor;
+  if (typeof valor === 'object' && valor.global !== undefined) return obtenerValorNumero(valor.global, fallback);
+  return fallback;
+}
 
 export default function ModalPerfilUsuario({
   visible,
   usuarioId,
   usuarioActual,
   onClose,
-  onIrAlChat,
-  deshabilitarChat = false
+  deshabilitarChat = false,
+  onIrAlChat
 }) {
-  const [perfil, setPerfil] = useState(null);
+  const [jugador, setJugador] = useState(null);
   const [cargando, setCargando] = useState(true);
-  const [pestana, setPestana] = useState('riot');
 
   useEffect(() => {
-    if (!usuarioId || !visible) return;
+    if (visible && usuarioId) {
+      cargarPerfil();
+    } else {
+      setJugador(null);
+    }
+  }, [visible, usuarioId]);
 
+  const cargarPerfil = async () => {
     setCargando(true);
-    perfilApi.obtenerPerfilPublico(usuarioId)
-      .then((data) => {
-        const u = data.usuario || data.perfil || data;
-        const riot = data.riot || u.riot || u.IntegracionRiot || null;
-        const steam = data.steam || u.steam || u.IntegracionSteam || null;
+    try {
+      const res = await usuariosApi.obtenerPerfil(usuarioId);
 
-        setPerfil({
-          ...u,
-          riot,
-          steam,
-          puede_calificar: Boolean(data.puede_calificar || u.puede_calificar || u.interactuado)
-        });
+      const base = res.usuario || res.perfil || res.data || res;
 
-        if (!riot && steam) setPestana('steam');
-        else setPestana('riot');
-      })
-      .catch((err) => {
-        Alert.alert('Error', err.message || 'No se pudo cargar el perfil');
-      })
-      .finally(() => setCargando(false));
-  }, [usuarioId, visible]);
+      const jugadorNormalizado = {
+        ...base,
+        id: base.id || res.id || usuarioId,
+        username: base.username || base.nombre || res.username || res.nombre || 'Jugador',
+        foto_perfil: base.foto_perfil || base.avatar || base.fotoPerfil || res.foto_perfil || res.avatar || res.fotoPerfil,
+        rango_edad: base.rango_edad || res.rango_edad,
+        verificado: Boolean(base.verificado || base.estaVerificado || res.verificado || res.estaVerificado),
+        biografia: base.biografia || res.biografia,
+        es_premium: base.es_premium ?? res.es_premium,
+        sinergia: base.sinergia || res.sinergia,
+        sinergia_porcentaje: base.sinergia_porcentaje ?? res.sinergia_porcentaje,
+        sinergia_riot: base.sinergia_riot ?? res.sinergia_riot,
+        sinergia_steam: base.sinergia_steam ?? res.sinergia_steam,
+        riot: base.riot || base.integracionRiot || base.IntegracionRiot || res.riot || res.integracionRiot || res.IntegracionRiot || null,
+        steam: base.steam || base.integracionSteam || base.IntegracionSteam || res.steam || res.integracionSteam || res.IntegracionSteam || null,
+      };
 
-  const iniciarChatPrivado = async () => {
+      setJugador(jugadorNormalizado);
+    } catch (error) {
+      console.error('Error al obtener perfil del usuario:', error);
+      Alert.alert('Error', 'No se pudieron cargar los datos del jugador.');
+      onClose();
+    } finally {
+      setCargando(false);
+    }
+  };
+
+  const handleHablar = async () => {
+    if (!jugador) return;
+
+    const esMenorMio = usuarioActual?.rango_edad === 'menor_18';
+    const esMenorTarget = jugador.rango_edad === 'menor_18';
+
+    if (usuarioActual?.rango_edad && jugador.rango_edad && esMenorMio !== esMenorTarget) {
+      Alert.alert(
+        'Acceso Restringido',
+        '🚫 No se permiten chats entre usuarios de distintos entornos de edad (Menores / Adultos).'
+      );
+      return;
+    }
+
     try {
       const res = await salasApi.crearSala({
         tipo: 'privada',
-        participante_id: usuarioId
+        participante_id: jugador.id
       });
+      const salaObtenida = res.sala || res;
       onClose();
       if (onIrAlChat) {
-        onIrAlChat(res.sala || res || { id: usuarioId });
+        onIrAlChat(salaObtenida, jugador);
       }
     } catch (err) {
-      // Manejado por interceptor
+      Alert.alert('Error', 'No se pudo iniciar la conversación privada.');
     }
+  };
+
+  const handleBloquear = () => {
+    if (!jugador) return;
+    const nombre = jugador.username || jugador.nombre || 'este usuario';
+    Alert.alert(
+      'Bloquear usuario',
+      `¿Estás seguro de que querés bloquear a ${nombre}?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Bloquear',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await usuariosApi.bloquear(jugador.id);
+              Alert.alert('Éxito', `${nombre} ha sido bloqueado.`);
+              onClose();
+            } catch (err) {
+              Alert.alert('Error', 'No se pudo procesar el bloqueo.');
+            }
+          }
+        }
+      ]
+    );
   };
 
   if (!visible) return null;
 
-  const esMenorActual = usuarioActual?.rango_edad === 'menor_18';
-  const esMenorPerfil = perfil?.rango_edad === 'menor_18';
-  const diferenteEntornoEdad = Boolean(
-    usuarioActual?.rango_edad && perfil?.rango_edad && esMenorActual !== esMenorPerfil
+  const esPremium = Boolean(
+    jugador?.es_premium === true ||
+      jugador?.es_premium === 1 ||
+      jugador?.es_premium === '1' ||
+      jugador?.es_premium === 'true'
   );
 
-  const esPremiumPerfil = Boolean(perfil?.es_premium || perfil?.esPremium || Number(perfil?.es_premium) === 1);
-  const estaVerificado = Boolean(perfil?.verificado || perfil?.estaVerificado);
+  const datosRiot = jugador?.riot || null;
+  const datosSteam = jugador?.steam || null;
+
+  const tieneRiot = Boolean(datosRiot && Object.keys(datosRiot).length > 0);
+  const tieneSteam = Boolean(datosSteam && Object.keys(datosSteam).length > 0);
+
+  const rawPosicion = datosRiot?.lol_posicion_principal
+    ? String(datosRiot.lol_posicion_principal).toUpperCase()
+    : null;
+  const rolInfo = rawPosicion ? CONFIG_ROLES[rawPosicion] : null;
+
+  const wins = datosRiot?.lol_wins || 0;
+  const losses = datosRiot?.lol_losses || 0;
+  const totalPartidas = wins + losses;
+
+  const winrate = jugador?.lol_winrate !== undefined && jugador?.lol_winrate !== null
+    ? jugador.lol_winrate
+    : totalPartidas > 0
+    ? Math.round((wins / totalPartidas) * 100)
+    : 0;
+
+  const topJuegosSteam = tieneSteam ? parsearTopJuegos(datosSteam.top_juegos) : [];
+
+  const cantidadJuegosSteam = datosSteam?.total_juegos > 0
+    ? datosSteam.total_juegos
+    : topJuegosSteam.length > 0
+    ? topJuegosSteam.length
+    : Array.isArray(jugador?.juegos)
+    ? jugador.juegos.length
+    : 0;
+
+  const porcentajeSinergia = obtenerValorNumero(jugador?.sinergia, obtenerValorNumero(jugador?.sinergia_porcentaje, 50));
+  const sinergiaRiot = obtenerValorNumero(jugador?.sinergia_riot);
+  const sinergiaSteam = obtenerValorNumero(jugador?.sinergia_steam);
+
+  const esMenorMio = usuarioActual?.rango_edad === 'menor_18';
+  const esMenorTarget = jugador?.rango_edad === 'menor_18';
+  const esEntornoDiferente = Boolean(usuarioActual?.rango_edad && jugador?.rango_edad && esMenorMio !== esMenorTarget);
+  const estaVerificadoTarget = Boolean(jugador?.verificado || jugador?.estaVerificado);
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <TouchableOpacity style={styles.botonCerrar} onPress={onClose}>
-            <Ionicons name="close" size={24} color="#94a3b8" />
-          </TouchableOpacity>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={tw`flex-1 bg-black/75 justify-center p-4`}>
+        <View style={tw.style('bg-slate-800 rounded-2xl border p-4 max-h-[85%]', esPremium ? 'border-amber-500/50' : 'border-white/10')}>
+          
+          {/* BOTÓN CERRAR SUPERIOR */}
+          <View style={tw`flex-row justify-between items-center pb-2 border-b border-white/10 mb-3`}>
+            <Text style={tw`text-white font-bold text-base`}>Perfil de Jugador</Text>
+            <TouchableOpacity onPress={onClose} style={tw`p-1`}>
+              <Ionicons name="close" size={24} color="#94a3b8" />
+            </TouchableOpacity>
+          </View>
 
-          {cargando ? (
-            <View style={styles.loaderContainer}>
+          {cargando || !jugador ? (
+            <View style={tw`py-12 justify-center items-center`}>
               <ActivityIndicator size="large" color="#6366f1" />
-              <Text style={styles.textoCargando}>Cargando perfil...</Text>
             </View>
-          ) : perfil ? (
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-              <View style={[styles.avatarContainer, esPremiumPerfil ? styles.avatarPremium : null]}>
-                {perfil.foto_perfil || perfil.avatar ? (
-                  <Image source={{ uri: perfil.foto_perfil || perfil.avatar }} style={styles.avatarImage} />
-                ) : (
-                  <Text style={styles.avatarText}>{perfil.username ? perfil.username[0].toUpperCase() : 'U'}</Text>
+          ) : (
+            <ScrollView showsVerticalScrollIndicator={false}>
+              
+              {/* INSIGNIA PREMIUM */}
+              {esPremium && (
+                <View style={tw`self-start bg-amber-400 px-2.5 py-0.5 rounded-full mb-3 flex-row items-center`}>
+                  <Text style={tw`text-slate-950 font-extrabold text-[10px] uppercase tracking-wider`}>
+                    ⭐ Premium
+                  </Text>
+                </View>
+              )}
+
+              {/* CABECERA: AVATAR, NOMBRE Y SINERGIA */}
+              <View style={tw`flex-row items-start justify-between mb-4`}>
+                <View style={tw`flex-row items-center flex-1 mr-2`}>
+                  <View
+                    style={tw.style(
+                      'w-14 h-14 rounded-full overflow-hidden border-2 bg-slate-700 justify-center items-center mr-3',
+                      esPremium ? 'border-amber-400' : 'border-white/20'
+                    )}
+                  >
+                    {jugador.foto_perfil ? (
+                      <Image
+                        source={{ uri: jugador.foto_perfil }}
+                        style={tw`w-full h-full`}
+                      />
+                    ) : (
+                      <Text style={tw`font-bold text-white text-xl`}>
+                        {(jugador.username?.[0] || 'U').toUpperCase()}
+                      </Text>
+                    )}
+                  </View>
+
+                  <View style={tw`flex-1`}>
+                    <Text style={tw`text-base font-bold text-white`} numberOfLines={1}>
+                      {jugador.username}
+                    </Text>
+                    <Text style={tw`text-xs text-slate-400 mt-0.5`} numberOfLines={1}>
+                      {jugador.rango_edad ? `Edad: ${jugador.rango_edad}` : 'Jugador GameMatch'}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={tw`items-end`}>
+                  <Text style={tw`bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-bold text-xs px-2 py-1 rounded-lg overflow-hidden`}>
+                    🤝 {porcentajeSinergia}% Sinergia
+                  </Text>
+
+                  <View style={tw`flex-row items-center mt-1`}>
+                    {sinergiaRiot !== null && (
+                      <Text style={tw`text-[10px] bg-red-500/10 border border-red-500/20 text-red-400 px-1.5 py-0.5 rounded mr-1 overflow-hidden`}>
+                        LoL: {sinergiaRiot}%
+                      </Text>
+                    )}
+
+                    {sinergiaSteam !== null && (
+                      <Text style={tw`text-[10px] bg-blue-500/10 border border-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded overflow-hidden`}>
+                        Steam: {sinergiaSteam}%
+                      </Text>
+                    )}
+                  </View>
+                </View>
+              </View>
+
+              {/* BIOGRAFÍA */}
+              {jugador.biografia ? (
+                <View style={tw`bg-slate-900/60 p-3 rounded-xl border border-white/5 mb-4`}>
+                  <Text style={tw`text-slate-300 text-xs italic`}>"{jugador.biografia}"</Text>
+                </View>
+              ) : null}
+
+              {/* CONTENEDOR DE CUENTAS VINCULADAS */}
+              <View style={tw.style({ gap: 10 })}>
+                {/* RIOT */}
+                {tieneRiot && (
+                  <View style={tw`bg-black/30 border border-white/5 rounded-xl p-3`}>
+                    <View style={tw`flex-row items-center justify-between`}>
+                      <View style={tw`flex-row items-center flex-1 mr-2`}>
+                        <Text style={tw`text-xs text-slate-500 mr-1.5`}>⚔️</Text>
+                        <Text style={tw`font-bold text-amber-400 text-xs`} numberOfLines={1}>
+                          {datosRiot.rango_lol || datosRiot.rango || 'UNRANKED'}
+                        </Text>
+                        {datosRiot.lol_lp !== undefined && datosRiot.lol_lp > 0 && (
+                          <Text style={tw`text-[10px] text-slate-400 ml-1`}>
+                            ({datosRiot.lol_lp} LP)
+                          </Text>
+                        )}
+                      </View>
+
+                      {rolInfo ? (
+                        <View style={tw.style('px-2 py-0.5 rounded-md border flex-row items-center', rolInfo.color)}>
+                          <Text style={tw`text-[10px] mr-1`}>{rolInfo.icono}</Text>
+                          <Text style={tw`text-[10px] font-bold`}>{rolInfo.label}</Text>
+                        </View>
+                      ) : rawPosicion ? (
+                        <View style={tw`bg-white/10 border border-white/20 px-2 py-0.5 rounded-md`}>
+                          <Text style={tw`text-[10px] font-bold text-slate-200`}>{rawPosicion}</Text>
+                        </View>
+                      ) : null}
+                    </View>
+
+                    {winrate > 0 && (
+                      <View style={tw`flex-row items-center justify-between pt-2 mt-2 border-t border-white/5`}>
+                        <Text style={tw`text-[11px] text-slate-400`}>Rendimiento SoloQ</Text>
+                        <Text style={tw`text-emerald-400 font-bold text-[11px]`}>{winrate}% WR</Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                {/* STEAM */}
+                {tieneSteam && (
+                  <View style={tw`bg-[#66c0f4]/10 border border-[#66c0f4]/20 rounded-xl p-3`}>
+                    <View style={tw`flex-row items-center justify-between`}>
+                      <View style={tw`flex-row items-center flex-1 mr-2`}>
+                        <Text style={tw`text-xs mr-1.5`}>🎮</Text>
+                        <Text style={tw`font-bold text-[#66c0f4] text-xs`} numberOfLines={1}>
+                          {datosSteam.steam_username || datosSteam.username || 'Cuenta Steam'}
+                        </Text>
+                      </View>
+
+                      {datosSteam.jugando_ahora ? (
+                        <View style={tw`bg-emerald-500/20 border border-emerald-500/30 px-2 py-0.5 rounded flex-row items-center`}>
+                          <View style={tw`w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1`} />
+                          <Text style={tw`text-emerald-300 text-[10px] font-medium`} numberOfLines={1}>
+                            {datosSteam.jugando_ahora}
+                          </Text>
+                        </View>
+                      ) : (
+                        <Text style={tw`text-[10px] text-slate-400`}>
+                          {cantidadJuegosSteam} {cantidadJuegosSteam === 1 ? 'juego' : 'juegos'}
+                        </Text>
+                      )}
+                    </View>
+
+                    {/* TOP JUEGOS DE STEAM */}
+                    {topJuegosSteam.length > 0 && (
+                      <View style={tw`flex-row flex-wrap items-center pt-2 mt-2 border-t border-white/5`}>
+                        {topJuegosSteam.slice(0, 4).map((juego, idx) => {
+                          const nombreJuego = typeof juego === 'string' ? juego : juego.name || juego.nombre;
+                          return (
+                            <View
+                              key={idx}
+                              style={tw`bg-white/5 border border-white/5 px-2 py-0.5 rounded mr-1 mb-1`}
+                            >
+                              <Text style={tw`text-[10px] text-slate-300`} numberOfLines={1}>
+                                {nombreJuego}
+                              </Text>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                {/* NO TIENE CUENTAS */}
+                {!tieneRiot && !tieneSteam && (
+                  <View style={tw`bg-black/20 border border-white/5 rounded-xl p-3 flex-row items-center justify-center`}>
+                    <Text style={tw`text-xs text-slate-400`}>🎮 Sin cuentas de juego vinculadas</Text>
+                  </View>
                 )}
               </View>
 
-              <Text style={styles.username}>{perfil.username || 'Jugador'}</Text>
-
-              <View style={styles.insigniasContainer}>
-                <View style={[styles.badge, esMenorPerfil ? styles.badgeMenor : styles.badgeAdulto]}>
-                  <Text style={[styles.badgeText, esMenorPerfil ? styles.badgeTextMenor : styles.badgeTextAdulto]}>
-                    {esMenorPerfil ? 'Menor' : 'Adulto'}
-                  </Text>
-                </View>
-
-                {estaVerificado ? (
-                  <View style={[styles.badge, styles.badgeVerificado]}>
-                    <Text style={styles.badgeTextVerificado}>✓ Verificado</Text>
+              <View style={tw`pt-4 mt-4 border-t border-white/10`}>
+                {esEntornoDiferente ? (
+                  <View style={tw`bg-red-500/10 border border-red-500/20 p-2.5 rounded-xl mb-2`}>
+                    <Text style={tw`text-red-400 text-xs font-semibold text-center`}>
+                      🚫 No se permiten chats entre usuarios de distintos entornos de edad (Menores / Adultos).
+                    </Text>
                   </View>
-                ) : null}
+                ) : (
+                  <View>
+                    {!estaVerificadoTarget && (
+                      <View style={tw`bg-amber-500/10 border border-amber-500/20 p-2.5 rounded-xl mb-3`}>
+                        <Text style={tw`text-amber-300 text-[11px] font-medium text-center`}>
+                          ⚠️ Usuario no verificado por rostro. Tené precaución al compartir datos personales.
+                        </Text>
+                      </View>
+                    )}
 
-                {esPremiumPerfil ? (
-                  <View style={[styles.badge, styles.badgePremium]}>
-                    <Text style={styles.badgeTextPremium}>⭐ Suscripto</Text>
+                    <View style={tw`flex-row items-center gap-2`}>
+                      {!deshabilitarChat && (
+                        <TouchableOpacity
+                          style={tw`flex-1 bg-indigo-500 py-2.5 rounded-xl flex-row justify-center items-center`}
+                          onPress={handleHablar}
+                        >
+                          <Ionicons name="chatbubble-ellipses-outline" size={18} color="#fff" style={tw`mr-1.5`} />
+                          <Text style={tw`text-white font-bold text-sm`}>Hablar</Text>
+                        </TouchableOpacity>
+                      )}
+
+                      <TouchableOpacity
+                        style={tw`bg-slate-700/60 border border-white/10 p-2.5 rounded-xl justify-center items-center`}
+                        onPress={handleBloquear}
+                      >
+                        <Ionicons name="ban-outline" size={20} color="#f59e0b" />
+                      </TouchableOpacity>
+                    </View>
                   </View>
-                ) : null}
+                )}
               </View>
 
-              <View style={styles.estadoContainer}>
-                <View style={[styles.estadoDot, { backgroundColor: ESTADO_COLOR[perfil.estado] || '#64748b' }]} />
-                <Text style={styles.estadoTexto}>{ESTADO_LABEL[perfil.estado] || 'Desconectado'}</Text>
-                {perfil.reputacion_porcentaje !== null && perfil.reputacion_porcentaje !== undefined ? (
-                  <Text style={styles.reputacionTexto}>{` · ${perfil.reputacion_porcentaje}% rep`}</Text>
-                ) : null}
-              </View>
-
-              {perfil.riot || perfil.steam ? (
-                <View style={styles.pestanasContainer}>
-                  {perfil.riot ? (
-                    <TouchableOpacity
-                      style={[styles.pestanaBoton, pestana === 'riot' ? styles.pestanaBotonActiva : null]}
-                      onPress={() => setPestana('riot')}
-                    >
-                      <Text style={styles.pestanaTexto}>⚔️ LoL</Text>
-                    </TouchableOpacity>
-                  ) : null}
-                  {perfil.steam ? (
-                    <TouchableOpacity
-                      style={[styles.pestanaBoton, pestana === 'steam' ? styles.pestanaBotonSteamActiva : null]}
-                      onPress={() => setPestana('steam')}
-                    >
-                      <Text style={styles.pestanaTexto}>🎮 Steam</Text>
-                    </TouchableOpacity>
-                  ) : null}
-                </View>
-              ) : null}
-
-              {pestana === 'riot' && perfil.riot ? (
-                <View style={styles.tarjetaPlataforma}>
-                  <Text style={styles.tituloPlataforma}>Riot Games</Text>
-                  <Text style={styles.detallePlataforma}>{`Invocador: ${perfil.riot.summoner_name || 'Vinculado'}`}</Text>
-                  {perfil.riot.rango ? (
-                    <Text style={styles.detallePlataforma}>{`Rango: ${perfil.riot.rango}`}</Text>
-                  ) : null}
-                </View>
-              ) : null}
-
-              {pestana === 'steam' && perfil.steam ? (
-                <View style={styles.tarjetaPlataforma}>
-                  <Text style={styles.tituloPlataforma}>Steam</Text>
-                  <Text style={styles.detallePlataforma}>{`Perfil: ${perfil.steam.steam_id || 'Vinculado'}`}</Text>
-                </View>
-              ) : null}
-
-              {!perfil.riot && !perfil.steam ? (
-                <View style={styles.tarjetaVacia}>
-                  <Text style={styles.textoVacio}>Sin cuentas de juego vinculadas</Text>
-                </View>
-              ) : null}
-
-              {usuarioActual?.id !== perfil?.id ? (
-                <View style={styles.accionesContainer}>
-                  {diferenteEntornoEdad ? (
-                    <View style={styles.alertaError}>
-                      <Text style={styles.alertaErrorTexto}>
-                        🚫 No se permiten chats entre usuarios de distintos entornos de edad.
-                      </Text>
-                    </View>
-                  ) : deshabilitarChat ? (
-                    <View style={styles.chatDeshabilitadoContainer}>
-                      <Ionicons name="chatbubbles" size={16} color="#a5b4fc" style={{ marginRight: 6 }} />
-                      <Text style={styles.chatDeshabilitadoTexto}>Ya estás en un chat con este usuario</Text>
-                    </View>
-                  ) : !esMenorActual && !perfil.verificado ? (
-                    <View style={styles.alertaWarning}>
-                      <Text style={styles.alertaWarningTexto}>
-                        ⚠️ Este usuario requiere verificar su cuenta para recibir chats privados.
-                      </Text>
-                    </View>
-                  ) : !esMenorActual && !usuarioActual?.verificado ? (
-                    <View style={styles.alertaWarning}>
-                      <Text style={styles.alertaWarningTexto}>
-                        🔒 Debes verificar tu perfil para iniciar chats privados.
-                      </Text>
-                    </View>
-                  ) : (
-                    <TouchableOpacity style={styles.botonHablar} onPress={iniciarChatPrivado}>
-                      <Ionicons name="chatbubble-outline" size={18} color="#fff" style={{ marginRight: 6 }} />
-                      <Text style={styles.botonHablarTexto}>Hablar por privado</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              ) : null}
             </ScrollView>
-          ) : null}
+          )}
+
         </View>
       </View>
     </Modal>
   );
 }
-
-const styles = StyleSheet.create({
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.75)',
-    justifyContent: 'center',
-    padding: 20
-  },
-  modalContent: {
-    backgroundColor: '#1e293b',
-    borderRadius: 20,
-    padding: 20,
-    maxHeight: '80%',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)'
-  },
-  botonCerrar: {
-    position: 'absolute',
-    right: 16,
-    top: 16,
-    zIndex: 10
-  },
-  loaderContainer: { padding: 40, alignItems: 'center' },
-  textoCargando: { color: '#94a3b8', marginTop: 10, fontSize: 13 },
-  scrollContent: { alignItems: 'center', paddingTop: 10 },
-  avatarContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#0f172a',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#6366f1'
-  },
-  avatarPremium: {
-    borderColor: '#fbbf24'
-  },
-  avatarImage: { width: 76, height: 76, borderRadius: 38 },
-  avatarText: { color: '#fff', fontSize: 28, fontWeight: 'bold' },
-  username: { color: '#fff', fontSize: 20, fontWeight: 'bold', marginTop: 10 },
-  insigniasContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8, justifyContent: 'center' },
-  badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1 },
-  badgeMenor: { backgroundColor: 'rgba(59, 130, 246, 0.1)', borderColor: 'rgba(59, 130, 246, 0.3)' },
-  badgeAdulto: { backgroundColor: 'rgba(16, 185, 129, 0.1)', borderColor: 'rgba(16, 185, 129, 0.3)' },
-  badgeVerificado: { backgroundColor: 'rgba(6, 182, 212, 0.1)', borderColor: 'rgba(6, 182, 212, 0.3)' },
-  badgePremium: { backgroundColor: 'rgba(251, 191, 36, 0.1)', borderColor: 'rgba(251, 191, 36, 0.3)' },
-  badgeText: { fontSize: 11, fontWeight: '500' },
-  badgeTextMenor: { color: '#60a5fa' },
-  badgeTextAdulto: { color: '#34d399' },
-  badgeTextVerificado: { color: '#67e8f9', fontSize: 11, fontWeight: '500' },
-  badgeTextPremium: { color: '#fcd34d', fontSize: 11, fontWeight: '500' },
-  estadoContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
-  estadoDot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
-  estadoTexto: { color: '#94a3b8', fontSize: 12 },
-  reputacionTexto: { color: '#34d399', fontSize: 12, fontWeight: 'bold' },
-  pestanasContainer: { flexDirection: 'row', width: '100%', gap: 8, marginTop: 16 },
-  pestanaBoton: { flex: 1, backgroundColor: '#0f172a', paddingVertical: 8, borderRadius: 8, alignItems: 'center' },
-  pestanaBotonActiva: { backgroundColor: '#6366f1' },
-  pestanaBotonSteamActiva: { backgroundColor: '#0284c7' },
-  pestanaTexto: { color: '#fff', fontSize: 13, fontWeight: '600' },
-  tarjetaPlataforma: { width: '100%', backgroundColor: '#0f172a', padding: 12, borderRadius: 10, marginTop: 10 },
-  tituloPlataforma: { color: '#fff', fontWeight: 'bold', fontSize: 14, marginBottom: 4 },
-  detallePlataforma: { color: '#94a3b8', fontSize: 12 },
-  tarjetaVacia: { width: '100%', backgroundColor: '#0f172a', padding: 12, borderRadius: 10, marginTop: 10, alignItems: 'center' },
-  textoVacio: { color: '#64748b', fontSize: 12 },
-  accionesContainer: { width: '100%', marginTop: 20 },
-  botonHablar: { backgroundColor: '#6366f1', flexDirection: 'row', paddingVertical: 12, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
-  botonHablarTexto: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
-  chatDeshabilitadoContainer: {
-    backgroundColor: '#334155',
-    flexDirection: 'row',
-    paddingVertical: 12,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)'
-  },
-  chatDeshabilitadoTexto: { color: '#cbd5e1', fontWeight: '600', fontSize: 13 },
-  alertaError: { backgroundColor: 'rgba(239, 68, 68, 0.1)', padding: 10, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.2)' },
-  alertaErrorTexto: { color: '#fca5a5', fontSize: 12, textAlign: 'center' },
-  alertaWarning: { backgroundColor: 'rgba(245, 158, 11, 0.1)', padding: 10, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(245, 158, 11, 0.2)' },
-  alertaWarningTexto: { color: '#fcd34d', fontSize: 12, textAlign: 'center' }
-});

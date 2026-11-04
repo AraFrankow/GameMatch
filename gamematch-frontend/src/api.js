@@ -116,6 +116,13 @@ export const authApi = {
     return data;
   },
 
+  buscarJuegosSteam: (token, q = '') => {
+    const headers = token && token !== 'null' ? authHeaders(token) : {};
+    return fetch(`${API_URL}/api/juegos/steam-autocomplete?q=${encodeURIComponent(q)}`, {
+      headers
+    }).then(manejarRespuesta);
+  },
+
   obtenerPerfilUsuario: (token, id) => fetch(`${API_URL}/api/usuarios/${id}`, { headers: authHeaders(token) }).then(manejarRespuesta),
 
   cancelarSuscripcion: (token) =>

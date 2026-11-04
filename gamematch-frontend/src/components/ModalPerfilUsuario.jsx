@@ -45,7 +45,7 @@ function InsigniasUsuario({ usuario }) {
       {estaVerificado && (
         <span
           className="text-[10px] px-2 py-0.5 rounded-md font-medium bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 flex items-center gap-1"
-          title="Cuenta verificada"
+          title="Cuenta verificada por rostro"
         >
           ✓ Verificado
         </span>
@@ -125,7 +125,7 @@ export default function ModalPerfilUsuario({ token, usuarioId, usuarioActual, on
       });
       onClose();
       if (onIrAlChat) {
-        onIrAlChat(res.sala);
+        onIrAlChat(res.sala || res);
       }
     } catch (err) {
       alert(err.message || 'No se pudo iniciar el chat privado');
@@ -138,12 +138,16 @@ export default function ModalPerfilUsuario({ token, usuarioId, usuarioActual, on
   const esPremiumPerfil = perfil ? Boolean(perfil.es_premium || perfil.esPremium || Number(perfil.es_premium) === 1) : false;
   const puedeCalificar = Boolean(perfil?.puede_calificar || perfil?.interactuado);
 
+  const esMenorMio = usuarioActual?.rango_edad === 'menor_18';
+  const esMenorPerfil = perfil?.rango_edad === 'menor_18';
+  const esEntornoDiferente = Boolean(usuarioActual?.rango_edad && perfil?.rango_edad && esMenorMio !== esMenorPerfil);
+
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-card border border-white/10 rounded-2xl p-6 w-full max-w-md relative shadow-2xl">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-white/50 hover:text-white text-lg transition"
+          className="absolute top-4 right-4 text-white/50 hover:text-white text-lg transition cursor-pointer"
         >
           ✕
         </button>
@@ -183,7 +187,7 @@ export default function ModalPerfilUsuario({ token, usuarioId, usuarioActual, on
                 <BadgeSinergia porcentaje={perfil.sinergia_porcentaje} />
               )}
 
-              {/* ETIQUETAS DESTACADAS (VISIBLES O BLOQUEADAS SEGÚN SINO ES PREMIUM) */}
+              {/* ETIQUETAS DESTACADAS */}
               <EtiquetasDestacadas
                 porcentajeReputacion={perfil.reputacion_porcentaje}
                 etiquetas={perfil.desglose_etiquetas}
@@ -197,7 +201,7 @@ export default function ModalPerfilUsuario({ token, usuarioId, usuarioActual, on
                     {perfil.riot && (
                       <button
                         onClick={() => setPestana('riot')}
-                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
                           pestana === 'riot'
                             ? 'bg-primary text-white shadow-md'
                             : 'text-white/50 hover:text-white'
@@ -210,7 +214,7 @@ export default function ModalPerfilUsuario({ token, usuarioId, usuarioActual, on
                     {perfil.steam && (
                       <button
                         onClick={() => setPestana('steam')}
-                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
                           pestana === 'steam'
                             ? 'bg-[#66c0f4]/20 border border-[#66c0f4]/40 text-[#66c0f4] shadow-md'
                             : 'text-white/50 hover:text-white'
@@ -244,48 +248,41 @@ export default function ModalPerfilUsuario({ token, usuarioId, usuarioActual, on
               </div>
             </div>
 
-            {usuarioActual?.id !== perfil?.id && (
+            {/* SECCIÓN DE ACCIONES DE CHAT / CALIFICACIÓN */}
+            {!esPerfilMio && (
               <div className="flex flex-col w-full gap-2 pt-3 border-t border-white/5 mt-3">
-                
-                {/* CASO 1: Incompatibilidad  (Adulto vs Menor) */}
-                {(usuarioActual?.rango_edad === 'menor_18') !== (perfil?.rango_edad === 'menor_18') ? (
+                {esEntornoDiferente ? (
                   <div className="bg-red-500/10 border border-red-500/20 text-red-300 text-xs p-2.5 rounded-xl text-center">
-                    🚫 No se permiten chats entre usuarios de distintos entornos de edad.
+                    🚫 No se permiten chats entre usuarios de distintos entornos de edad (Menores / Adultos).
                   </div>
-
-                ) : /* CASO 2: Entorno de Adultos y alguno no está verificado */
-                usuarioActual?.rango_edad !== 'menor_18' && !perfil.verificado ? (
-                  <div className="bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs p-2.5 rounded-xl text-center">
-                    ⚠️ Este usuario requiere verificar su cuenta para recibir chats privados.
-                  </div>
-
-                ) : usuarioActual?.rango_edad !== 'menor_18' && !usuarioActual?.verificado ? (
-                  <div className="bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs p-2.5 rounded-xl text-center">
-                    🔒 Debes verificar tu rostro en tu perfil para iniciar chats privados.
-                  </div>
-
                 ) : (
-                  /* CASO 3: Menores de edad O Adultos ambos verificados -> HABILITADO */
-                  <div className="flex gap-2">
-                    <button
-                      onClick={iniciarChatPrivado}
-                      className="flex-1 bg-primary hover:bg-primary/90 text-white font-medium py-2.5 rounded-xl transition text-sm flex items-center justify-center gap-2 shadow-lg"
-                    >
-                      Hablar por privado
-                    </button>
-
-                    {puedeCalificar && (
-                      <button
-                        onClick={() => setMostrarModalCalificar(true)}
-                        className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold px-3 py-2.5 rounded-xl transition text-xs flex items-center gap-1 shrink-0"
-                        title="Calificar a este jugador"
-                      >
-                        ⭐ Calificar
-                      </button>
+                  <div className="space-y-2 w-full">
+                    {!perfil.verificado && (
+                      <div className="bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[11px] p-2 rounded-xl text-center">
+                        ⚠️ Usuario no verificado por rostro. Tené precaución al compartir datos personales.
+                      </div>
                     )}
+
+                    <div className="flex gap-2 w-full">
+                      <button
+                        onClick={iniciarChatPrivado}
+                        className="flex-1 bg-primary hover:bg-primary/90 text-white font-medium py-2.5 rounded-xl transition text-sm flex items-center justify-center gap-2 shadow-lg cursor-pointer"
+                      >
+                        Hablar por privado
+                      </button>
+
+                      {puedeCalificar && (
+                        <button
+                          onClick={() => setMostrarModalCalificar(true)}
+                          className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold px-3 py-2.5 rounded-xl transition text-xs flex items-center gap-1 shrink-0 cursor-pointer"
+                          title="Calificar a este jugador"
+                        >
+                          ⭐ Calificar
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )}
-
               </div>
             )}
           </div>

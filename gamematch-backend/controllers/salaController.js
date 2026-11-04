@@ -36,19 +36,6 @@ const crearSala = async (req, res) => {
         return res.status(403).json({ error: 'No se puede iniciar un chat entre un menor de edad y un adulto' });
       }
 
-      const esMenor = req.usuario.rango_edad === 'menor_18';
-      if (!esMenor) {
-        if (!req.usuario.verificado) {
-          return res.status(403).json({
-            error: 'Debés verificar tu rostro para iniciar chats en el entorno de adultos.'
-          });
-        }
-        if (!otro.verificado) {
-          return res.status(403).json({
-            error: 'El usuario destino aún no completó la verificación de su cuenta.'
-          });
-        }
-      }
 
       const salasCreador = await SalaParticipante.findAll({ where: { usuario_id: creador_id } });
       const idsSalasCreador = salasCreador.map((s) => s.sala_id);
@@ -165,15 +152,6 @@ const invitar = async (req, res) => {
 
     if (!esSegregacionValida(req.usuario.rango_edad, invitado.rango_edad)) {
       return res.status(403).json({ error: 'No se puede invitar a un usuario del otro lado de la barrera de edad' });
-    }
-
-    if (req.usuario.rango_edad !== 'menor_18') {
-      if (!req.usuario.verificado) {
-        return res.status(403).json({ error: 'Debés verificar tu rostro para invitar usuarios en el entorno de adultos' });
-      }
-      if (!invitado.verificado) {
-        return res.status(403).json({ error: 'El usuario a invitar no ha verificado su cuenta' });
-      }
     }
 
     const notificacion = await Notificacion.create({

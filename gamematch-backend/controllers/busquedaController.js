@@ -1,10 +1,26 @@
-const { Usuario, UsuarioPlataforma, UsuarioJuego, Juego, IntegracionRiot, IntegracionSteam } = require('../models');
 const { Op } = require('sequelize');
+const { Usuario, UsuarioPlataforma, UsuarioJuego, Juego, IntegracionRiot, IntegracionSteam } = require('../models');
 const { calcularSinergiaDuo } = require('../utils/sinergia');
 const { calcularReputacionBulk } = require('../utils/reputacion');
 const { obtenerIdsBloqueados } = require('./bloqueoController');
 
 const RANGOS_ORDEN = ['IRON', 'BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'EMERALD', 'DIAMOND', 'MASTER', 'GRANDMASTER', 'CHALLENGER'];
+
+const obtenerReputacionUnificada = (mapa, id) => {
+  if (!mapa) return null;
+  let res = null;
+
+  if (typeof mapa.get === 'function') {
+    res = mapa.get(id) ?? mapa.get(String(id)) ?? mapa.get(Number(id));
+  } else {
+    res = mapa[id] ?? mapa[String(id)] ?? mapa[Number(id)];
+  }
+
+  if (res === null || res === undefined) return null;
+  if (typeof res === 'number') return res;
+
+  return res.porcentaje ?? res.porcentajePositivo ?? res.porcentaje_positivo ?? res.reputacion ?? res.valor ?? null;
+};
 
 const buscarCompaneros = async (req, res) => {
   try {
@@ -23,6 +39,8 @@ const buscarCompaneros = async (req, res) => {
       winrate_min,
       sinergia_min,
       rol_preferido,
+      reputacion_min,
+      juego_steam,
     } = req.query;
 
     const whereUsuario = {
@@ -32,6 +50,39 @@ const buscarCompaneros = async (req, res) => {
 
     if (modo_juego) whereUsuario.modo_juego = modo_juego;
     if (rango_edad) whereUsuario.rango_edad = rango_edad;
+
+    if (juego_steam && juego_steam.trim() !== '') {
+      const juegosCoincidentes = await Juego.findAll({
+        where: {
+          nombre: { [Op.like]: `%${juego_steam.trim()}%` }
+        },
+        attributes: ['id'],
+        raw: true
+      });
+
+      const idsJuegos = juegosCoincidentes.map((j) => j.id);
+
+      if (idsJuegos.length > 0) {
+        const usuarioJuegos = await UsuarioJuego.findAll({
+          where: { juego_id: { [Op.in]: idsJuegos } },
+          attributes: ['usuario_id'],
+          raw: true
+        });
+
+        const idsUsuariosConJuego = [...new Set(usuarioJuegos.map((uj) => uj.usuario_id).filter(Boolean))];
+
+        if (idsUsuariosConJuego.length > 0) {
+          whereUsuario.id = {
+            [Op.notIn]: idsExcluidos,
+            [Op.in]: idsUsuariosConJuego
+          };
+        } else {
+          whereUsuario.id = -1;
+        }
+      } else {
+        whereUsuario.id = -1;
+      }
+    }
 
     const includes = [
       {
@@ -79,9 +130,18 @@ const buscarCompaneros = async (req, res) => {
 
     let resultados = candidatosRaw.map((u) => {
       const plano = u.toJSON();
-      const rep = reputacionesMap.get(u.id) || { porcentaje: null };
 
-      plano.reputacion_porcentaje = rep.porcentaje;
+      const rawRep = obtenerReputacionUnificada(reputacionesMap, u.id);
+
+      let repNum = null;
+      if (rawRep !== null && rawRep !== undefined) {
+        const parsed = parseFloat(String(rawRep).replace('%', '').trim());
+        if (!isNaN(parsed)) {
+          repNum = parsed <= 1 && parsed > 0 ? parsed * 100 : parsed;
+        }
+      }
+
+      plano.reputacion_porcentaje = repNum;
 
       const sinergiaObj = calcularSinergiaDuo(perfilSolicitante, plano);
 
@@ -141,6 +201,13 @@ const buscarCompaneros = async (req, res) => {
           const tieneRolEnRiot = c.riot?.lol_posicion_principal?.toUpperCase() === rol_preferido.toUpperCase();
           return tieneRolEnJuegos || tieneRolEnRiot;
         });
+      }
+
+      if (reputacion_min) {
+        const minRep = Number(reputacion_min);
+        resultados = resultados.filter(
+          (c) => c.reputacion_porcentaje !== null && c.reputacion_porcentaje !== undefined && c.reputacion_porcentaje >= minRep
+        );
       }
     }
 

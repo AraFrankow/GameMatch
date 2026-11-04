@@ -1,23 +1,16 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, TouchableOpacity } from 'react-native';
+import tw from 'twrnc';
 
 export default function PerfilScreen({ usuario, onCerrarSesion }) {
   return (
-    <View style={styles.container}>
-      <Text style={styles.titulo}>Mi Perfil</Text>
-      <Text style={styles.usuario}>¡Hola, {usuario?.nombre || usuario?.email || 'Jugador'}!</Text>
+    <View style={tw`flex-1 bg-slate-900 justify-center items-center p-5`}>
+      <Text style={tw`text-[22px] font-bold text-white`}>Mi Perfil</Text>
+      <Text style={tw`text-base text-slate-400 mt-2`}>¡Hola, {usuario?.nombre || usuario?.email || 'Jugador'}!</Text>
 
-      <TouchableOpacity style={styles.botonCerrar} onPress={onCerrarSesion}>
-        <Text style={styles.textoBoton}>Cerrar Sesión</Text>
+      <TouchableOpacity style={tw`bg-red-500 py-3 px-6 rounded-xl mt-[30px]`} onPress={onCerrarSesion}>
+        <Text style={tw`text-white font-bold`}>Cerrar Sesión</Text>
       </TouchableOpacity>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f172a', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  titulo: { fontSize: 22, fontWeight: 'bold', color: '#fff' },
-  usuario: { fontSize: 16, color: '#94a3b8', marginTop: 8 },
-  botonCerrar: { backgroundColor: '#ef4444', paddingVertical: 12, paddingHorizontal: 24, borderRadius: 10, marginTop: 30 },
-  textoBoton: { color: '#fff', fontWeight: 'bold' },
-});

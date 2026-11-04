@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { Text, View, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import tw from 'twrnc';
+
 import { authApi } from '../api';
 import { storage } from '../services/storage';
 
@@ -66,15 +68,15 @@ export default function LoginScreen({ onLoginExitoso }) {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.card}>
-        <Text style={styles.titulo}>GameMatch Mobile</Text>
-        <Text style={styles.subtitulo}>Encuentra tu Duo Perfecto</Text>
+    <View style={tw`flex-1 bg-slate-900 justify-center p-5`}>
+      <View style={tw`bg-slate-800 p-6 rounded-2xl border border-white/10`}>
+        <Text style={tw`text-[26px] font-bold text-white text-center`}>GameMatch Mobile</Text>
+        <Text style={tw`text-[13px] text-slate-400 text-center mb-6 mt-1`}>Encuentra tu Duo Perfecto</Text>
 
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {error ? <Text style={tw`text-red-500 text-center mb-3 text-[13px]`}>{error}</Text> : null}
 
         <TextInput
-          style={styles.input}
+          style={tw`bg-slate-900 border border-white/10 rounded-xl p-3 text-white mb-3`}
           placeholder="Email..."
           placeholderTextColor="#64748b"
           value={email}
@@ -83,7 +85,7 @@ export default function LoginScreen({ onLoginExitoso }) {
         />
 
         <TextInput
-          style={styles.input}
+          style={tw`bg-slate-900 border border-white/10 rounded-xl p-3 text-white mb-3`}
           placeholder="Contraseña..."
           placeholderTextColor="#64748b"
           secureTextEntry
@@ -91,31 +93,18 @@ export default function LoginScreen({ onLoginExitoso }) {
           onChangeText={setPassword}
         />
 
-        <TouchableOpacity style={styles.boton} onPress={handleLogin} disabled={cargando}>
-          {cargando ? <ActivityIndicator color="#fff" /> : <Text style={styles.textoBoton}>Iniciar Sesión</Text>}
+        <TouchableOpacity style={tw`bg-indigo-500 p-3.5 rounded-xl items-center mt-2`} onPress={handleLogin} disabled={cargando}>
+          {cargando ? <ActivityIndicator color="#fff" /> : <Text style={tw`text-white font-semibold`}>Iniciar Sesión</Text>}
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.boton, styles.botonGoogle]}
+          style={tw`bg-white p-3.5 rounded-xl items-center mt-3`}
           onPress={handleGoogleLogin}
           disabled={cargando}
         >
-          <Text style={styles.textoBotonGoogle}>Continuar con Google</Text>
+          <Text style={tw`text-slate-900 font-bold`}>Continuar con Google</Text>
         </TouchableOpacity>
       </View>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f172a', justifyContent: 'center', padding: 20 },
-  card: { backgroundColor: '#1e293b', padding: 24, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
-  titulo: { fontSize: 26, fontWeight: 'bold', color: '#fff', textAlign: 'center' },
-  subtitulo: { fontSize: 13, color: '#94a3b8', textAlign: 'center', marginBottom: 24, marginTop: 4 },
-  input: { backgroundColor: '#0f172a', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 10, padding: 12, color: '#fff', marginBottom: 12 },
-  boton: { backgroundColor: '#6366f1', padding: 14, borderRadius: 10, alignItems: 'center', marginTop: 8 },
-  botonGoogle: { backgroundColor: '#fff', marginTop: 12 },
-  textoBoton: { color: '#fff', fontWeight: '600' },
-  textoBotonGoogle: { color: '#0f172a', fontWeight: 'bold' },
-  error: { color: '#ef4444', textAlign: 'center', marginBottom: 12, fontSize: 13 }
-});

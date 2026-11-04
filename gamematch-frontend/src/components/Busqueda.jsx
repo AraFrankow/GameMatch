@@ -24,6 +24,7 @@ export default function Busqueda({ token, usuario, onVerPerfil }) {
     winrate_min: '',
     sinergia_min: '',
     rol_preferido: '',
+    solo_premium: '',
   });
 
   const cargarDestacados = async () => {
@@ -89,6 +90,19 @@ export default function Busqueda({ token, usuario, onVerPerfil }) {
     }
   };
 
+  const jugadoresAMostrar = jugadores.filter((j) => {
+    if (filtros.solo_premium === 'true') {
+      const esPremium = Boolean(
+        j.es_premium === true ||
+          j.es_premium === 1 ||
+          j.es_premium === '1' ||
+          j.es_premium === 'true'
+      );
+      if (!esPremium) return false;
+    }
+    return true;
+  });
+
   return (
     <div className="w-full max-w-6xl mx-auto p-4 space-y-6 text-left">
       <h2 className="text-xl font-bold text-white">Buscar jugadores</h2>
@@ -105,7 +119,7 @@ export default function Busqueda({ token, usuario, onVerPerfil }) {
       <div className="space-y-4">
         <div className="flex items-center justify-between border-b border-white/10 pb-2">
           <h3 className="text-sm font-bold text-white/90">Jugadores encontrados</h3>
-          <span className="text-xs text-white/40">{jugadores.length} resultados</span>
+          <span className="text-xs text-white/40">{jugadoresAMostrar.length} resultados</span>
         </div>
 
         {cargando && (
@@ -116,15 +130,15 @@ export default function Busqueda({ token, usuario, onVerPerfil }) {
           <p className="text-center text-xs text-red-400 py-4">{error}</p>
         )}
 
-        {!cargando && !error && jugadores.length === 0 && (
+        {!cargando && !error && jugadoresAMostrar.length === 0 && (
           <p className="text-center text-xs text-white/40 italic py-8">
             No se encontraron jugadores que coincidan con los filtros.
           </p>
         )}
 
-        {!cargando && jugadores.length > 0 && (
+        {!cargando && jugadoresAMostrar.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {jugadores.map((j) => (
+            {jugadoresAMostrar.map((j) => (
               <TarjetaJugador
                 key={j.id}
                 jugador={j}

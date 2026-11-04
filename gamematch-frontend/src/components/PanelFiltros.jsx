@@ -1,22 +1,84 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { authApi } from '../api';
 
 const RANGOS_LOL = ['IRON', 'BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'EMERALD', 'DIAMOND', 'MASTER'];
 const ROLES = ['TOP', 'JUNGLE', 'MID', 'ADC', 'SUPPORT'];
 
 export default function PanelFiltros({ filtros, setFiltros, esPremium, onBuscar }) {
+  const [busquedaJuego, setBusquedaJuego] = useState(filtros.juego_steam || '');
+  const [sugerenciasJuegos, setSugerenciasJuegos] = useState([]);
+  const [cargandoJuegos, setCargandoJuegos] = useState(false);
+  const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    setBusquedaJuego(filtros.juego_steam || '');
+  }, [filtros.juego_steam]);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setMostrarSugerencias(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const handleChange = (e) => {
-    setFiltros({ ...filtros, [e.target.name]: e.target.value });
+    const { name, value, type, checked } = e.target;
+    setFiltros({
+      ...filtros,
+      [name]: type === 'checkbox' ? (checked ? 'true' : '') : value,
+    });
+  };
+
+  const handleInputChangeJuego = async (e) => {
+    const valor = e.target.value;
+    setBusquedaJuego(valor);
+    setFiltros((prev) => ({ ...prev, juego_steam: valor }));
+
+    if (!valor.trim()) {
+      setSugerenciasJuegos([]);
+      setMostrarSugerencias(false);
+      return;
+    }
+
+    setCargandoJuegos(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await authApi.buscarJuegosSteam(token, valor.trim());
+      const lista = res?.juegos || [];
+      setSugerenciasJuegos(lista);
+      setMostrarSugerencias(lista.length > 0);
+    } catch (err) {
+      console.error('Error al buscar juegos de Steam:', err);
+      setSugerenciasJuegos([]);
+    } finally {
+      setCargandoJuegos(false);
+    }
+  };
+
+  const seleccionarJuego = (nombreJuego) => {
+    setBusquedaJuego(nombreJuego);
+    setFiltros((prev) => ({ ...prev, juego_steam: nombreJuego }));
+    setMostrarSugerencias(false);
   };
 
   const handleLimpiar = () => {
+    setBusquedaJuego('');
+    setSugerenciasJuegos([]);
+    setMostrarSugerencias(false);
     setFiltros({
       modo_juego: '',
-      plataforma: '',
       rango_edad: '',
+      juego_steam: '',
       rango_lol: '',
       winrate_min: '',
       sinergia_min: '',
       rol_preferido: '',
+      reputacion_min: '',
+      solo_premium: '',
     });
   };
 
@@ -28,11 +90,26 @@ export default function PanelFiltros({ filtros, setFiltros, esPremium, onBuscar 
           Filtros de Búsqueda
         </h3>
         <button
+          type="button"
           onClick={handleLimpiar}
           className="text-xs text-white/40 hover:text-white transition"
         >
           Limpiar filtros
         </button>
+      </div>
+
+      {/* FILTRO SOLO JUGADORES PREMIUM */}
+      <div className="p-3 bg-surface/50 border border-amber-500/30 rounded-xl flex items-center justify-between">
+        <label className="flex items-center gap-2.5 text-xs font-bold text-amber-400 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            name="solo_premium"
+            checked={filtros.solo_premium === 'true'}
+            onChange={handleChange}
+            className="w-4 h-4 accent-amber-400 rounded cursor-pointer"
+          />
+          ⭐ Mostrar solo jugadores Premium
+        </label>
       </div>
 
       {/* FILTROS BÁSICOS */}
@@ -41,7 +118,7 @@ export default function PanelFiltros({ filtros, setFiltros, esPremium, onBuscar 
           <label className="block text-[11px] text-white/60 mb-1 font-medium">Modo de Juego</label>
           <select
             name="modo_juego"
-            value={filtros.modo_juego}
+            value={filtros.modo_juego || ''}
             onChange={handleChange}
             className="w-full bg-surface border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-primary transition"
           >
@@ -53,25 +130,10 @@ export default function PanelFiltros({ filtros, setFiltros, esPremium, onBuscar 
         </div>
 
         <div>
-          <label className="block text-[11px] text-white/60 mb-1 font-medium">Plataforma</label>
-          <select
-            name="plataforma"
-            value={filtros.plataforma}
-            onChange={handleChange}
-            className="w-full bg-surface border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-primary transition"
-          >
-            <option value="">Todas</option>
-            <option value="pc">PC</option>
-            <option value="consola">Consola</option>
-            <option value="mobile">Mobile</option>
-          </select>
-        </div>
-
-        <div>
           <label className="block text-[11px] text-white/60 mb-1 font-medium">Rango de Edad</label>
           <select
             name="rango_edad"
-            value={filtros.rango_edad}
+            value={filtros.rango_edad || ''}
             onChange={handleChange}
             className="w-full bg-surface border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-primary transition"
           >
@@ -81,6 +143,42 @@ export default function PanelFiltros({ filtros, setFiltros, esPremium, onBuscar 
             <option value="26_35">26 a 35</option>
             <option value="36_mas">36 o más</option>
           </select>
+        </div>
+
+        {/* BUSCADOR AUTOCOMPLETABLE DE JUEGOS DE STEAM */}
+        <div className="relative" ref={dropdownRef}>
+          <label className="block text-[11px] text-white/60 mb-1 font-medium">Juego de Steam</label>
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Ej: Counter-Strike, Rust..."
+              value={busquedaJuego}
+              onChange={handleInputChangeJuego}
+              onFocus={() => sugerenciasJuegos.length > 0 && setMostrarSugerencias(true)}
+              className="w-full bg-surface border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-primary transition pr-8"
+            />
+            {cargandoJuegos && (
+              <span className="absolute right-2.5 top-2.5 text-[10px] text-primary animate-pulse">
+                ⌛
+              </span>
+            )}
+          </div>
+
+          {/* DESPLEGABLE DE SUGERENCIAS FLOTANTE */}
+          {mostrarSugerencias && sugerenciasJuegos.length > 0 && (
+            <div className="absolute left-0 right-0 top-full mt-1 bg-surface border border-white/10 rounded-xl shadow-2xl z-30 max-h-48 overflow-y-auto">
+              {sugerenciasJuegos.map((juego, index) => (
+                <button
+                  key={index}
+                  type="button"
+                  onClick={() => seleccionarJuego(juego)}
+                  className="w-full text-left px-3 py-2 text-xs text-white/80 hover:text-white hover:bg-primary/20 border-b border-white/5 last:border-0 transition"
+                >
+                  🎮 {juego}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -103,7 +201,7 @@ export default function PanelFiltros({ filtros, setFiltros, esPremium, onBuscar 
             <select
               name="rango_lol"
               disabled={!esPremium}
-              value={filtros.rango_lol}
+              value={filtros.rango_lol || ''}
               onChange={handleChange}
               className="w-full bg-surface border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-amber-400 disabled:cursor-not-allowed disabled:opacity-40 transition"
             >
@@ -119,7 +217,7 @@ export default function PanelFiltros({ filtros, setFiltros, esPremium, onBuscar 
             <select
               name="winrate_min"
               disabled={!esPremium}
-              value={filtros.winrate_min}
+              value={filtros.winrate_min || ''}
               onChange={handleChange}
               className="w-full bg-surface border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-amber-400 disabled:cursor-not-allowed disabled:opacity-40 transition"
             >
@@ -135,7 +233,7 @@ export default function PanelFiltros({ filtros, setFiltros, esPremium, onBuscar 
             <select
               name="sinergia_min"
               disabled={!esPremium}
-              value={filtros.sinergia_min}
+              value={filtros.sinergia_min || ''}
               onChange={handleChange}
               className="w-full bg-surface border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-amber-400 disabled:cursor-not-allowed disabled:opacity-40 transition"
             >
@@ -151,7 +249,7 @@ export default function PanelFiltros({ filtros, setFiltros, esPremium, onBuscar 
             <select
               name="rol_preferido"
               disabled={!esPremium}
-              value={filtros.rol_preferido}
+              value={filtros.rol_preferido || ''}
               onChange={handleChange}
               className="w-full bg-surface border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-amber-400 disabled:cursor-not-allowed disabled:opacity-40 transition"
             >
@@ -161,12 +259,31 @@ export default function PanelFiltros({ filtros, setFiltros, esPremium, onBuscar 
               ))}
             </select>
           </div>
+
+          <div>
+            <label className="block text-[11px] text-white/60 mb-1 font-medium truncate">
+              Reputación Mínima
+            </label>
+            <select
+              name="reputacion_min"
+              disabled={!esPremium}
+              value={filtros.reputacion_min || ''}
+              onChange={handleChange}
+              className="w-full bg-surface border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-amber-400 disabled:cursor-not-allowed disabled:opacity-40 transition"
+            >
+              <option value="">Sin Mínimo</option>
+              <option value="50">≥ 50% Positiva</option>
+              <option value="75">≥ 75% Buena</option>
+              <option value="90">≥ 90% Excelente</option>
+            </select>
+          </div>
         </div>
       </div>
 
       <div className="pt-2">
         <button
-          onClick={onBuscar}
+          type="button"
+          onClick={() => onBuscar && onBuscar(filtros)}
           className="w-full bg-primary hover:bg-primary/90 text-white font-bold text-xs py-2.5 rounded-xl transition shadow-lg"
         >
           Aplicar Filtros y Buscar Jugadores

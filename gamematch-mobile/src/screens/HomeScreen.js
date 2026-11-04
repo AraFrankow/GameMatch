@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   FlatList,
   Image,
   TouchableOpacity,
@@ -13,11 +12,15 @@ import {
   Modal
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import tw from 'twrnc';
+
 import { storage } from '../services/storage';
 import { usuariosApi, salasApi } from '../api';
 import ModalPerfilUsuario from '../components/ModalPerfilUsuario';
+import PanelFiltros from '../components/PanelFiltros';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
+
 const MOTIVOS = [
   { id: 'lenguaje_inapropiado', label: 'Lenguaje Inapropiado' },
   { id: 'acoso', label: 'Acoso / Hostigamiento' },
@@ -25,11 +28,55 @@ const MOTIVOS = [
   { id: 'otro', label: 'Otro motivo' }
 ];
 
+const CONFIG_ROLES = {
+  TOP: { label: 'TOP', color: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30', icono: '🛡️' },
+  JUNGLE: { label: 'JUNGLA', color: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30', icono: '🌿' },
+  MID: { label: 'MID', color: 'bg-purple-500/20 text-purple-300 border-purple-500/30', icono: '⚡' },
+  MIDDLE: { label: 'MID', color: 'bg-purple-500/20 text-purple-300 border-purple-500/30', icono: '⚡' },
+  ADC: { label: 'ADC', color: 'bg-amber-500/20 text-amber-300 border-amber-500/30', icono: '🎯' },
+  BOT: { label: 'ADC', color: 'bg-amber-500/20 text-amber-300 border-amber-500/30', icono: '🎯' },
+  BOTTOM: { label: 'ADC', color: 'bg-amber-500/20 text-amber-300 border-amber-500/30', icono: '🎯' },
+  SUPPORT: { label: 'SUPPORT', color: 'bg-rose-500/20 text-rose-300 border-rose-500/30', icono: '💚' },
+  UTILITY: { label: 'SUPPORT', color: 'bg-rose-500/20 text-rose-300 border-rose-500/30', icono: '💚' },
+  ARAM: { label: 'ARAM', color: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30', icono: '❄️' },
+  ARENA: { label: 'ARENA', color: 'bg-amber-500/20 text-amber-300 border-amber-500/30', icono: '⚔️' },
+};
+
+function parsearTopJuegos(topJuegos) {
+  if (!topJuegos) return [];
+  if (Array.isArray(topJuegos)) return topJuegos;
+  try {
+    const parsed = JSON.parse(topJuegos);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function obtenerValorNumero(valor, fallback = null) {
+  if (valor === null || valor === undefined) return fallback;
+  if (typeof valor === 'number' || typeof valor === 'string') return valor;
+  if (typeof valor === 'object' && valor.global !== undefined) return obtenerValorNumero(valor.global, fallback);
+  return fallback;
+}
+
 export default function HomeScreen({ navigation }) {
   const [usuarios, setUsuarios] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [refrescando, setRefrescando] = useState(false);
   const [busqueda, setBusqueda] = useState('');
+  const [mostrarFiltros, setMostrarFiltros] = useState(false);
+
+  const [filtros, setFiltros] = useState({
+    modo_juego: '',
+    plataforma: '',
+    rango_edad: '',
+    rango_lol: '',
+    winrate_min: '',
+    sinergia_min: '',
+    rol_preferido: '',
+    solo_premium: '',
+  });
 
   const [miUsuario, setMiUsuario] = useState(null);
 
@@ -42,13 +89,24 @@ export default function HomeScreen({ navigation }) {
   const [usuarioPerfilId, setUsuarioPerfilId] = useState(null);
   const [modalPerfilVisible, setModalPerfilVisible] = useState(false);
 
-  const cargarUsuarios = async () => {
+  const cargarUsuarios = async (filtrosAEnviar = filtros) => {
     try {
       const user = await storage.obtener('usuario');
       setMiUsuario(user);
 
       const token = await storage.obtener('token');
-      const response = await fetch(`${API_URL}/busqueda`, {
+
+      const params = new URLSearchParams();
+      if (busqueda.trim()) params.append('q', busqueda.trim());
+
+      Object.keys(filtrosAEnviar).forEach((key) => {
+        if (filtrosAEnviar[key]) {
+          params.append(key, filtrosAEnviar[key]);
+        }
+      });
+
+      const url = `${API_URL}/busqueda?${params.toString()}`;
+      const response = await fetch(url, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -75,7 +133,7 @@ export default function HomeScreen({ navigation }) {
   const onRefresh = useCallback(() => {
     setRefrescando(true);
     cargarUsuarios();
-  }, []);
+  }, [filtros, busqueda]);
 
   const abrirPerfilUsuario = (usuarioId) => {
     setUsuarioPerfilId(usuarioId);
@@ -87,29 +145,11 @@ export default function HomeScreen({ navigation }) {
 
     const esMenorMio = miUsuario?.rango_edad === 'menor_18';
     const esMenorTarget = usuario.rango_edad === 'menor_18';
-    const verificadoMio = Boolean(miUsuario?.verificado || miUsuario?.estaVerificado);
-    const verificadoTarget = Boolean(usuario.verificado || usuario.estaVerificado);
 
     if (miUsuario?.rango_edad && usuario.rango_edad && esMenorMio !== esMenorTarget) {
       Alert.alert(
         'Acceso Restringido',
         '🚫 No se permiten chats entre usuarios de distintos entornos de edad (Menores / Adultos).'
-      );
-      return;
-    }
-
-    if (!esMenorMio && !verificadoMio) {
-      Alert.alert(
-        'Verificación Requerida',
-        '🔒 Debés verificar tu rostro en tu perfil para iniciar chats privados.'
-      );
-      return;
-    }
-
-    if (!esMenorMio && !verificadoTarget) {
-      Alert.alert(
-        'Usuario No Verificado',
-        '⚠️ Este usuario requiere verificar su cuenta para poder recibir chats privados.'
       );
       return;
     }
@@ -190,43 +230,257 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
+  const esPremium = Boolean(
+    miUsuario?.es_premium === true ||
+      miUsuario?.es_premium === 1 ||
+      miUsuario?.es_premium === '1' ||
+      miUsuario?.es_premium === 'true'
+  );
+
   const usuariosFiltrados = usuarios.filter((user) => {
     const query = busqueda.toLowerCase();
     const nombre = (user.nombre || user.username || '').toLowerCase();
     const juego = (user.juegoFavorito || user.juego || '').toLowerCase();
-    return nombre.includes(query) || juego.includes(query);
+    const coincideBusqueda = nombre.includes(query) || juego.includes(query);
+
+    const esJugadorPremium = Boolean(
+      user.es_premium === true ||
+        user.es_premium === 1 ||
+        user.es_premium === '1' ||
+        user.es_premium === 'true'
+    );
+
+    if (filtros.solo_premium === 'true' && !esJugadorPremium) {
+      return false;
+    }
+
+    return coincideBusqueda;
   });
 
   const renderPlayerCard = ({ item }) => {
-    const avatarUri = item.avatar || item.foto_perfil || item.fotoPerfil || 'https://via.placeholder.com/150';
+    const esJugadorPremium = Boolean(
+      item.es_premium === true ||
+        item.es_premium === 1 ||
+        item.es_premium === '1' ||
+        item.es_premium === 'true'
+    );
+
+    const avatarUri = item.foto_perfil || item.avatar || item.fotoPerfil;
+
+    const datosRiot = item.riot || item.integracionRiot || item.IntegracionRiot || null;
+    const datosSteam = item.steam || item.integracionSteam || item.IntegracionSteam || null;
+
+    const tieneRiot = Boolean(datosRiot && Object.keys(datosRiot).length > 0);
+    const tieneSteam = Boolean(datosSteam && Object.keys(datosSteam).length > 0);
+
+    const rawPosicion = datosRiot?.lol_posicion_principal
+      ? String(datosRiot.lol_posicion_principal).toUpperCase()
+      : null;
+    const rolInfo = rawPosicion ? CONFIG_ROLES[rawPosicion] : null;
+
+    const wins = datosRiot?.lol_wins || 0;
+    const losses = datosRiot?.lol_losses || 0;
+    const totalPartidas = wins + losses;
+
+    const winrate = item.lol_winrate !== undefined && item.lol_winrate !== null
+      ? item.lol_winrate
+      : totalPartidas > 0
+      ? Math.round((wins / totalPartidas) * 100)
+      : 0;
+
+    const topJuegosSteam = tieneSteam ? parsearTopJuegos(datosSteam.top_juegos) : [];
+
+    const cantidadJuegosSteam = datosSteam?.total_juegos > 0
+      ? datosSteam.total_juegos
+      : topJuegosSteam.length > 0
+      ? topJuegosSteam.length
+      : Array.isArray(item.juegos)
+      ? item.juegos.length
+      : 0;
+
+    const porcentajeSinergia = obtenerValorNumero(item.sinergia, obtenerValorNumero(item.sinergia_porcentaje, 50));
+    const sinergiaRiot = obtenerValorNumero(item.sinergia_riot);
+    const sinergiaSteam = obtenerValorNumero(item.sinergia_steam);
 
     return (
-      <View style={styles.card}>
-        <TouchableOpacity style={styles.cardHeader} activeOpacity={0.7} onPress={() => abrirPerfilUsuario(item.id)}>
-          <Image source={{ uri: avatarUri }} style={styles.avatar} />
-          <View style={styles.infoContainer}>
-            <Text style={styles.nombre}>{item.nombre || item.username || 'Jugador'}</Text>
-            <Text style={styles.detalles}>🎮 {item.juegoFavorito || item.juego || 'Juego N/A'}</Text>
-            <Text style={styles.rango}>🏆 {item.rango || 'Sin Rango'}</Text>
+      <View
+        style={tw.style(
+          'relative bg-slate-800 rounded-2xl p-4 mb-3.5 border shadow-lg',
+          esJugadorPremium ? 'border-amber-500/40' : 'border-white/10'
+        )}
+      >
+        {/* INSIGNIA PREMIUM */}
+        {esJugadorPremium && (
+          <View style={tw`absolute -top-2.5 right-4 bg-amber-400 px-2 py-0.5 rounded-full z-10 flex-row items-center`}>
+            <Text style={tw`text-slate-950 font-extrabold text-[9px] uppercase tracking-wider`}>
+              ⭐ Premium
+            </Text>
           </View>
-          <Ionicons name="chevron-forward" size={20} color="#64748b" />
+        )}
+
+        {/* CABECERA: AVATAR, NOMBRE Y SINERGIA */}
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={() => abrirPerfilUsuario(item.id)}
+          style={tw`flex-row items-start justify-between mb-3`}
+        >
+          <View style={tw`flex-row items-center flex-1 mr-2`}>
+            <View
+              style={tw.style(
+                'w-12 h-12 rounded-full overflow-hidden border-2 bg-slate-700 justify-center items-center mr-3',
+                esJugadorPremium ? 'border-amber-400' : 'border-white/20'
+              )}
+            >
+              {avatarUri ? (
+                <Image source={{ uri: avatarUri }} style={tw`w-full h-full`} />
+              ) : (
+                <Text style={tw`font-bold text-white text-lg`}>
+                  {(item.username?.[0] || item.nombre?.[0] || 'U').toUpperCase()}
+                </Text>
+              )}
+            </View>
+
+            <View style={tw`flex-1`}>
+              <Text style={tw`text-sm font-bold text-white`} numberOfLines={1}>
+                {item.username || item.nombre || 'Jugador'}
+              </Text>
+              <Text style={tw`text-[11px] text-slate-400`} numberOfLines={1}>
+                {item.rango_edad ? `Edad: ${item.rango_edad}` : 'Jugador GameMatch'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={tw`items-end`}>
+            <Text style={tw`bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-bold text-xs px-2 py-1 rounded-lg overflow-hidden`}>
+              🤝 {porcentajeSinergia}% Sinergia
+            </Text>
+
+            <View style={tw`flex-row items-center mt-1`}>
+              {sinergiaRiot !== null && (
+                <Text style={tw`text-[10px] bg-red-500/10 border border-red-500/20 text-red-400 px-1.5 py-0.5 rounded mr-1 overflow-hidden`}>
+                  LoL: {sinergiaRiot}%
+                </Text>
+              )}
+
+              {sinergiaSteam !== null && (
+                <Text style={tw`text-[10px] bg-blue-500/10 border border-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded overflow-hidden`}>
+                  Steam: {sinergiaSteam}%
+                </Text>
+              )}
+            </View>
+          </View>
         </TouchableOpacity>
 
-        {item.biografia ? (
-          <Text style={styles.biografia} numberOfLines={2}>"{item.biografia}"</Text>
-        ) : null}
+        {/* CONTENEDOR DE CUENTAS VINCULADAS */}
+        <View style={tw.style({ gap: 8 }, 'mb-3')}>
+          {/* RIOT */}
+          {tieneRiot && (
+            <View style={tw`bg-black/30 border border-white/5 rounded-xl p-2.5`}>
+              <View style={tw`flex-row items-center justify-between`}>
+                <View style={tw`flex-row items-center flex-1 mr-2`}>
+                  <Text style={tw`text-[10px] text-slate-500 mr-1`}>⚔️</Text>
+                  <Text style={tw`font-bold text-amber-400 text-xs`} numberOfLines={1}>
+                    {datosRiot.rango_lol || datosRiot.rango || 'UNRANKED'}
+                  </Text>
+                  {datosRiot.lol_lp !== undefined && datosRiot.lol_lp > 0 && (
+                    <Text style={tw`text-[10px] text-slate-400 ml-1`}>
+                      ({datosRiot.lol_lp} LP)
+                    </Text>
+                  )}
+                </View>
 
-        <View style={styles.cardFooter}>
-          <TouchableOpacity style={styles.botonHablar} onPress={() => handleHablar(item)}>
-            <Ionicons name="chatbubble-ellipses-outline" size={18} color="#fff" style={{ marginRight: 6 }} />
-            <Text style={styles.textoBoton}>Hablar</Text>
+                {rolInfo ? (
+                  <View style={tw.style('px-1.5 py-0.5 rounded-md border flex-row items-center', rolInfo.color)}>
+                    <Text style={tw`text-[9px] mr-1`}>{rolInfo.icono}</Text>
+                    <Text style={tw`text-[9px] font-bold`}>{rolInfo.label}</Text>
+                  </View>
+                ) : rawPosicion ? (
+                  <View style={tw`bg-white/10 border border-white/20 px-1.5 py-0.5 rounded-md`}>
+                    <Text style={tw`text-[9px] font-bold text-slate-200`}>{rawPosicion}</Text>
+                  </View>
+                ) : null}
+              </View>
+
+              {winrate > 0 && (
+                <View style={tw`flex-row items-center justify-between pt-1.5 mt-1.5 border-t border-white/5`}>
+                  <Text style={tw`text-[10px] text-slate-400`}>Rendimiento SoloQ</Text>
+                  <Text style={tw`text-emerald-400 font-bold text-[10px]`}>{winrate}% WR</Text>
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* STEAM */}
+          {tieneSteam && (
+            <View style={tw`bg-[#66c0f4]/10 border border-[#66c0f4]/20 rounded-xl p-2.5`}>
+              <View style={tw`flex-row items-center justify-between`}>
+                <View style={tw`flex-row items-center flex-1 mr-2`}>
+                  <Text style={tw`text-[11px] mr-1`}>🎮</Text>
+                  <Text style={tw`font-bold text-[#66c0f4] text-xs`} numberOfLines={1}>
+                    {datosSteam.steam_username || datosSteam.username || 'Cuenta Steam'}
+                  </Text>
+                </View>
+
+                {datosSteam.jugando_ahora ? (
+                  <View style={tw`bg-emerald-500/20 border border-emerald-500/30 px-1.5 py-0.5 rounded flex-row items-center`}>
+                    <View style={tw`w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1`} />
+                    <Text style={tw`text-emerald-300 text-[9px] font-medium`} numberOfLines={1}>
+                      {datosSteam.jugando_ahora}
+                    </Text>
+                  </View>
+                ) : (
+                  <Text style={tw`text-[10px] text-slate-400`}>
+                    {cantidadJuegosSteam} {cantidadJuegosSteam === 1 ? 'juego' : 'juegos'}
+                  </Text>
+                )}
+              </View>
+
+              {topJuegosSteam.length > 0 && (
+                <View style={tw`flex-row flex-wrap items-center pt-1.5 mt-1.5 border-t border-white/5`}>
+                  {topJuegosSteam.slice(0, 3).map((juego, idx) => {
+                    const nombreJuego = typeof juego === 'string' ? juego : juego.name || juego.nombre;
+                    return (
+                      <View key={idx} style={tw`bg-white/5 border border-white/5 px-1.5 py-0.5 rounded mr-1 mb-1`}>
+                        <Text style={tw`text-[9px] text-slate-300`} numberOfLines={1}>
+                          {nombreJuego}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* SIN VINCULACIONES */}
+          {!tieneRiot && !tieneSteam && (
+            <View style={tw`bg-black/20 border border-white/5 rounded-xl p-2.5 flex-row items-center justify-center`}>
+              <Text style={tw`text-[11px] text-slate-500`}>🎮 Sin cuentas de juego vinculadas</Text>
+            </View>
+          )}
+        </View>
+
+        {/* BOTONES DE ACCIÓN */}
+        <View style={tw.style('flex-row items-center pt-2.5 border-t border-white/5', { gap: 8 })}>
+          <TouchableOpacity
+            style={tw`flex-1 bg-indigo-500 flex-row justify-center items-center py-2.5 rounded-xl`}
+            onPress={() => handleHablar(item)}
+          >
+            <Ionicons name="chatbubble-ellipses-outline" size={18} color="#fff" style={tw`mr-1.5`} />
+            <Text style={tw`text-white font-semibold text-sm`}>Hablar</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.botonAccionIcono} onPress={() => handleBloquear(item)}>
+          <TouchableOpacity
+            style={tw`bg-slate-700/60 w-[42px] h-[42px] rounded-xl justify-center items-center border border-white/10`}
+            onPress={() => handleBloquear(item)}
+          >
             <Ionicons name="ban-outline" size={18} color="#f59e0b" />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.botonAccionIcono} onPress={() => abrirModalReporte(item)}>
+          <TouchableOpacity
+            style={tw`bg-slate-700/60 w-[42px] h-[42px] rounded-xl justify-center items-center border border-white/10`}
+            onPress={() => abrirModalReporte(item)}
+          >
             <Ionicons name="flag-outline" size={18} color="#ef4444" />
           </TouchableOpacity>
         </View>
@@ -235,30 +489,45 @@ export default function HomeScreen({ navigation }) {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.titulo}>Buscar Dúo</Text>
-        <Text style={styles.subtitulo}>Encontrá compañeros activos para jugar</Text>
+    <View style={tw`flex-1 bg-slate-900`}>
+      <View style={tw`pt-12 px-5 pb-4 bg-slate-800`}>
+        <Text style={tw`text-2xl font-bold text-white`}>Buscar Dúo</Text>
+        <Text style={tw`text-[13px] text-slate-400 mt-0.5 mb-3.5`}>Encontrá compañeros activos para jugar</Text>
 
-        <View style={styles.searchBar}>
-          <Ionicons name="search-outline" size={20} color="#64748b" style={{ marginRight: 8 }} />
-          <TextInput
-            style={styles.inputSearch}
-            placeholder="Buscar por jugador o juego..."
-            placeholderTextColor="#64748b"
-            value={busqueda}
-            onChangeText={setBusqueda}
-          />
-          {busqueda ? (
-            <TouchableOpacity onPress={() => setBusqueda('')}>
-              <Ionicons name="close-circle" size={18} color="#64748b" />
-            </TouchableOpacity>
-          ) : null}
+        {/* BARRA DE BÚSQUEDA Y BOTÓN DE FILTROS */}
+        <View style={tw`flex-row items-center gap-2`}>
+          <View style={tw`flex-1 flex-row items-center bg-slate-900 rounded-xl px-3 py-2 border border-white/10`}>
+            <Ionicons name="search-outline" size={20} color="#64748b" style={tw`mr-2`} />
+            <TextInput
+              style={tw`flex-1 text-white text-sm`}
+              placeholder="Buscar por jugador o juego..."
+              placeholderTextColor="#64748b"
+              value={busqueda}
+              onChangeText={setBusqueda}
+              onSubmitEditing={() => cargarUsuarios(filtros)}
+            />
+            {busqueda ? (
+              <TouchableOpacity onPress={() => setBusqueda('')}>
+                <Ionicons name="close-circle" size={18} color="#64748b" />
+              </TouchableOpacity>
+            ) : null}
+          </View>
+
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => setMostrarFiltros(!mostrarFiltros)}
+            style={tw.style(
+              'p-2.5 rounded-xl border flex-row items-center justify-center',
+              mostrarFiltros ? 'bg-indigo-500 border-indigo-500' : 'bg-slate-900 border-white/10'
+            )}
+          >
+            <Ionicons name="options-outline" size={20} color={mostrarFiltros ? '#fff' : '#94a3b8'} />
+          </TouchableOpacity>
         </View>
       </View>
 
       {cargando ? (
-        <View style={styles.loaderContainer}>
+        <View style={tw`flex-1 justify-center items-center`}>
           <ActivityIndicator size="large" color="#6366f1" />
         </View>
       ) : (
@@ -266,12 +535,22 @@ export default function HomeScreen({ navigation }) {
           data={usuariosFiltrados}
           keyExtractor={(item, index) => item.id?.toString() || index.toString()}
           renderItem={renderPlayerCard}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={tw`p-4 pb-8`}
           refreshControl={<RefreshControl refreshing={refrescando} onRefresh={onRefresh} tintColor="#6366f1" />}
+          ListHeaderComponent={
+            mostrarFiltros ? (
+              <PanelFiltros
+                filtros={filtros}
+                setFiltros={setFiltros}
+                esPremium={esPremium}
+                onBuscar={() => cargarUsuarios(filtros)}
+              />
+            ) : null
+          }
           ListEmptyComponent={
-            <View style={styles.emptyContainer}>
+            <View style={tw`items-center justify-center mt-15`}>
               <Ionicons name="people-outline" size={48} color="#64748b" />
-              <Text style={styles.emptyText}>No se encontraron jugadores disponibles</Text>
+              <Text style={tw`text-slate-400 text-sm mt-3`}>No se encontraron jugadores disponibles</Text>
             </View>
           }
         />
@@ -291,28 +570,28 @@ export default function HomeScreen({ navigation }) {
 
       {/* MODAL DE REPORTE */}
       <Modal visible={modalReporteVisible} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitulo}>
+        <View style={tw`flex-1 bg-black/70 justify-center p-5`}>
+          <View style={tw`bg-slate-800 rounded-2xl p-5 border border-white/10`}>
+            <Text style={tw`text-lg font-bold text-white mb-1`}>
               Reportar a {usuarioAReportar?.nombre || usuarioAReportar?.username}
             </Text>
-            <Text style={styles.modalSubtitulo}>Seleccioná el motivo del reporte:</Text>
+            <Text style={tw`text-[13px] text-slate-400 mb-3.5`}>Seleccioná el motivo del reporte:</Text>
 
-            <View style={styles.motivosContainer}>
+            <View style={tw.style({ gap: 8 }, 'mb-3.5')}>
               {MOTIVOS.map((item) => (
                 <TouchableOpacity
                   key={item.id}
-                  style={[
-                    styles.motivoChip,
-                    motivoSeleccionado === item.id ? styles.motivoChipSeleccionado : null
-                  ]}
+                  style={tw.style(
+                    'bg-slate-900 py-2.5 px-3.5 rounded-lg border border-white/10',
+                    motivoSeleccionado === item.id && 'bg-indigo-500 border-indigo-500'
+                  )}
                   onPress={() => setMotivoSeleccionado(item.id)}
                 >
                   <Text
-                    style={[
-                      styles.motivoTexto,
-                      motivoSeleccionado === item.id ? styles.motivoTextoSeleccionado : null
-                    ]}
+                    style={tw.style(
+                      'text-slate-400 text-[13px] font-medium',
+                      motivoSeleccionado === item.id && 'text-white font-bold'
+                    )}
                   >
                     {item.label}
                   </Text>
@@ -321,7 +600,7 @@ export default function HomeScreen({ navigation }) {
             </View>
 
             <TextInput
-              style={styles.inputComentario}
+              style={tw.style('bg-slate-900 rounded-lg p-3 text-white text-[13px] border border-white/10 mb-4', { textAlignVertical: 'top' })}
               placeholder="Detallá el motivo o la situación..."
               placeholderTextColor="#64748b"
               multiline
@@ -330,24 +609,24 @@ export default function HomeScreen({ navigation }) {
               onChangeText={setComentarioReporte}
             />
 
-            <View style={styles.modalAcciones}>
+            <View style={tw.style('flex-row justify-end', { gap: 10 })}>
               <TouchableOpacity
-                style={styles.botonCancelarModal}
+                style={tw`py-2.5 px-4 rounded-lg`}
                 onPress={() => setModalReporteVisible(false)}
                 disabled={enviandoReporte}
               >
-                <Text style={styles.textoCancelarModal}>Cancelar</Text>
+                <Text style={tw`text-slate-400 font-semibold`}>Cancelar</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.botonEnviarModal}
+                style={tw`bg-red-500 py-2.5 px-[18px] rounded-lg`}
                 onPress={enviarReporteModal}
                 disabled={enviandoReporte}
               >
                 {enviandoReporte ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text style={styles.textoEnviarModal}>Enviar Reporte</Text>
+                  <Text style={tw`text-white font-bold`}>Enviar Reporte</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -357,115 +636,3 @@ export default function HomeScreen({ navigation }) {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f172a' },
-  header: { paddingTop: 50, paddingHorizontal: 20, paddingBottom: 16, backgroundColor: '#1e293b' },
-  titulo: { fontSize: 24, fontWeight: 'bold', color: '#fff' },
-  subtitulo: { fontSize: 13, color: '#94a3b8', marginTop: 2, marginBottom: 14 },
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#0f172a',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
-  inputSearch: { flex: 1, color: '#fff', fontSize: 14 },
-  loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  listContent: { padding: 16, paddingBottom: 30 },
-  card: {
-    backgroundColor: '#1e293b',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
-  cardHeader: { flexDirection: 'row', alignItems: 'center' },
-  avatar: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#334155' },
-  infoContainer: { marginLeft: 14, flex: 1 },
-  nombre: { fontSize: 17, fontWeight: 'bold', color: '#fff' },
-  detalles: { fontSize: 13, color: '#a5b4fc', marginTop: 2 },
-  rango: { fontSize: 12, color: '#94a3b8', marginTop: 2 },
-  biografia: { fontSize: 13, color: '#cbd5e1', fontStyle: 'italic', marginTop: 10 },
-  cardFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 14,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.05)',
-    gap: 8,
-  },
-  botonHablar: {
-    flex: 1,
-    backgroundColor: '#6366f1',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderRadius: 10,
-  },
-  textoBoton: { color: '#fff', fontWeight: '600', fontSize: 14 },
-  botonAccionIcono: {
-    backgroundColor: '#334155',
-    width: 42,
-    height: 42,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
-  emptyContainer: { alignItems: 'center', justifyContent: 'center', marginTop: 60 },
-  emptyText: { color: '#64748b', fontSize: 15, marginTop: 12 },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'center',
-    padding: 20
-  },
-  modalContent: {
-    backgroundColor: '#1e293b',
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)'
-  },
-  modalTitulo: { fontSize: 18, fontWeight: 'bold', color: '#fff', marginBottom: 4 },
-  modalSubtitulo: { fontSize: 13, color: '#94a3b8', marginBottom: 14 },
-  motivosContainer: { gap: 8, marginBottom: 14 },
-  motivoChip: {
-    backgroundColor: '#0f172a',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)'
-  },
-  motivoChipSeleccionado: {
-    backgroundColor: '#6366f1',
-    borderColor: '#6366f1'
-  },
-  motivoTexto: { color: '#94a3b8', fontSize: 13, fontWeight: '500' },
-  motivoTextoSeleccionado: { color: '#fff', fontWeight: 'bold' },
-  inputComentario: {
-    backgroundColor: '#0f172a',
-    borderRadius: 8,
-    padding: 12,
-    color: '#fff',
-    fontSize: 13,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    marginBottom: 16,
-    textAlignVertical: 'top'
-  },
-  modalAcciones: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10 },
-  botonCancelarModal: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8 },
-  textoCancelarModal: { color: '#94a3b8', fontWeight: '600' },
-  botonEnviarModal: { backgroundColor: '#ef4444', paddingVertical: 10, paddingHorizontal: 18, borderRadius: 8 },
-  textoEnviarModal: { color: '#fff', fontWeight: 'bold' }
-});

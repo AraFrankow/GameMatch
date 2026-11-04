@@ -6,22 +6,23 @@ import {
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
   Alert,
   Modal,
   Image,
-  TouchableWithoutFeedback,
-  Keyboard,
-  BackHandler
+  BackHandler,
+  KeyboardAvoidingView,
+  Platform
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import tw from 'twrnc';
 
-import { salasApi } from '../api';
+import { authApi, salasApi } from '../api';
 import { storage } from '../services/storage';
 import { conectarSocket, obtenerSocket } from '../services/socket';
 import ModalPerfilUsuario from '../components/ModalPerfilUsuario';
+
+const esVerdadero = (v) => v === true || v === 1 || v === '1' || v === 'true';
 
 export default function SalasScreen({ route, navigation }) {
   const targetUser = route?.params?.targetUser;
@@ -34,6 +35,9 @@ export default function SalasScreen({ route, navigation }) {
   const [miUsuario, setMiUsuario] = useState(null);
   const [cargandoSalas, setCargandoSalas] = useState(true);
   const [cargandoMensajes, setCargandoMensajes] = useState(false);
+  const [busqueda, setBusqueda] = useState('');
+  const [sugerencias, setSugerencias] = useState([]);
+  const [cargandoSugerencias, setCargandoSugerencias] = useState(false);
 
   const [modalIntegrantesVisible, setModalIntegrantesVisible] = useState(false);
   const [usuarioSeleccionadoId, setUsuarioSeleccionadoId] = useState(null);
@@ -164,24 +168,42 @@ export default function SalasScreen({ route, navigation }) {
   }, []);
 
   useEffect(() => {
-    if (salas.length > 0 && (salaDirecta || targetUser)) {
-      let salaASeleccionar = null;
-
+    const gestionarParametros = async () => {
       if (salaDirecta) {
-        salaASeleccionar = salas.find((s) => Number(s.id) === Number(salaDirecta.id)) || salaDirecta;
+        const salaASeleccionar = salas.find((s) => Number(s.id) === Number(salaDirecta.id)) || salaDirecta;
+        seleccionarSala(salaASeleccionar);
+        navigation.setParams({ salaDirecta: null });
       } else if (targetUser) {
-        salaASeleccionar = salas.find((s) => {
-          const lista = s.participantes || s.usuarios || s.Participantes || [];
+        let salaEncontrada = salas.find((s) => {
+          const lista = s.participantes || s.usuarios || s.Participantes || s.Usuarios || [];
           return lista.some(
             (p) => Number(p.id || p.usuario_id || p.usuario?.id) === Number(targetUser.id)
           );
         });
-      }
 
-      if (salaASeleccionar) {
-        seleccionarSala(salaASeleccionar);
-        navigation.setParams({ salaDirecta: null, targetUser: null });
+        if (!salaEncontrada) {
+          try {
+            const apiRes = await (salasApi.crearSala
+              ? salasApi.crearSala({ tipo: 'privada', participante_id: targetUser.id })
+              : authApi.crearSala(null, { tipo: 'privada', participante_id: targetUser.id }));
+            salaEncontrada = apiRes.sala || apiRes;
+            await cargarSalas();
+          } catch (e) {
+            salaEncontrada = { id: Date.now(), tipo: 'privada' };
+          }
+        }
+
+        seleccionarSala({
+          ...salaEncontrada,
+          _targetUser: targetUser,
+          tipo: 'privada'
+        });
+        navigation.setParams({ targetUser: null });
       }
+    };
+
+    if (targetUser || salaDirecta) {
+      gestionarParametros();
     }
   }, [targetUser, salaDirecta, salas]);
 
@@ -206,10 +228,15 @@ export default function SalasScreen({ route, navigation }) {
   };
 
   const seleccionarSala = async (sala) => {
-    if (!sala || !sala.id) return;
+    if (!sala) return;
 
     const salaCompleta = salas.find((s) => Number(s.id) === Number(sala.id)) || sala;
-    setSalaActiva(salaCompleta);
+    const salaConTarget = {
+      ...salaCompleta,
+      _targetUser: sala._targetUser || salaCompleta._targetUser
+    };
+
+    setSalaActiva(salaConTarget);
     setCargandoMensajes(true);
 
     setSalas((prev) =>
@@ -218,17 +245,46 @@ export default function SalasScreen({ route, navigation }) {
 
     try {
       const socket = obtenerSocket();
-      if (socket) {
+      if (socket && sala.id) {
         socket.emit('unirse_sala', { sala_id: sala.id });
       }
 
-      const historial = await salasApi.obtenerHistorial(sala.id);
-      setMensajes(Array.isArray(historial) ? historial : historial.mensajes || []);
+      if (sala.id) {
+        const historial = await salasApi.obtenerHistorial(sala.id);
+        setMensajes(Array.isArray(historial) ? historial : historial.mensajes || []);
+      }
     } catch (error) {
       console.error('Error al cargar historial de mensajes:', error);
     } finally {
       setCargandoMensajes(false);
     }
+  };
+
+  const handleBuscar = async (textoVal) => {
+    setBusqueda(textoVal);
+    if (!textoVal.trim()) {
+      setSugerencias([]);
+      return;
+    }
+
+    setCargandoSugerencias(true);
+    try {
+      const miToken = await storage.obtener('token');
+      const res = await authApi.buscarUsuarios(miToken, textoVal.trim());
+      const lista = res.usuarios || [];
+      const miId = miUsuario?.id || miUsuario?.usuario?.id;
+      setSugerencias(lista.filter((u) => Number(u.id) !== Number(miId)));
+    } catch (err) {
+      console.error('Error al buscar usuarios:', err);
+    } finally {
+      setCargandoSugerencias(false);
+    }
+  };
+
+  const iniciarChatConUsuario = (target) => {
+    setBusqueda('');
+    setSugerencias([]);
+    navigation.setParams({ targetUser: target });
   };
 
   const handleEnviarMensaje = () => {
@@ -272,7 +328,12 @@ export default function SalasScreen({ route, navigation }) {
             p.foto_perfil ||
             p.avatar ||
             'https://via.placeholder.com/150',
-          rango: uObj.rango || p.rango || 'Sin Rango'
+          rango: uObj.rango || p.rango || 'Sin Rango',
+          verificado:
+            esVerdadero(uObj.verificado) ||
+            esVerdadero(uObj.estaVerificado) ||
+            esVerdadero(p.verificado) ||
+            esVerdadero(p.estaVerificado)
         });
       }
     });
@@ -284,13 +345,18 @@ export default function SalasScreen({ route, navigation }) {
     const miId = miUsuario?.id || miUsuario?.usuario?.id;
     const integrantes = obtenerListaIntegrantes(sala);
     const otros = integrantes.filter((p) => Number(p.id) !== Number(miId));
-    const esGrupo = sala?.tipo === 'grupal' || sala?.es_grupo || integrantes.length > 2;
 
-    if (!esGrupo && otros.length > 0) {
+    const targetObj = sala?._targetUser || otros[0];
+    const esGrupo = sala?.tipo === 'grupal' || sala?.es_grupo || (integrantes.length > 2 && !sala?._targetUser);
+
+    if (!esGrupo && targetObj) {
       return {
-        nombre: otros[0].username,
-        avatar: otros[0].foto_perfil,
-        otroUsuarioId: otros[0].id,
+        nombre: targetObj.username || targetObj.nombre || 'Jugador',
+        avatar: targetObj.foto_perfil || targetObj.avatar || 'https://via.placeholder.com/150',
+        otroUsuarioId: targetObj.id,
+        otroVerificado:
+          esVerdadero(targetObj.verificado) ||
+          esVerdadero(targetObj.estaVerificado),
         esGrupo: false
       };
     }
@@ -330,9 +396,14 @@ export default function SalasScreen({ route, navigation }) {
 
         <View style={tw`flex-1 ml-3.5 justify-center`}>
           <View style={tw`flex-row justify-between items-center`}>
-            <Text style={tw`text-base font-bold text-slate-100 flex-1 mr-2`} numberOfLines={1}>
-              {datos.nombre}
-            </Text>
+            <View style={tw`flex-row items-center flex-1 mr-2`}>
+              <Text style={tw`text-base font-bold text-slate-100 shrink`} numberOfLines={1}>
+                {datos.nombre}
+              </Text>
+              {!datos.esGrupo && datos.otroVerificado ? (
+                <Text style={tw`text-emerald-400 text-xs font-bold ml-1.5`}>✓</Text>
+              ) : null}
+            </View>
             {item.updated_at ? (
               <Text style={tw.style('text-xs text-slate-500', sinLeer > 0 && 'text-indigo-500 font-bold')}>
                 {formatearHora(item.updated_at)}
@@ -385,168 +456,249 @@ export default function SalasScreen({ route, navigation }) {
     const integrantes = obtenerListaIntegrantes(salaActiva);
 
     return (
-      <KeyboardAvoidingView
-        style={tw`flex-1 bg-slate-900`}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-      >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <View style={{ flex: 1 }}>
-            <View style={tw`flex-row items-center pt-12 px-3 pb-3 bg-slate-800 border-b border-white/10`}>
-              <TouchableOpacity
-                style={tw`p-2 mr-1`}
-                onPress={() => setSalaActiva(null)}
-              >
-                <Ionicons name="arrow-back" size={24} color="#fff" />
-              </TouchableOpacity>
+      <SafeAreaView style={tw`flex-1 bg-slate-900`} edges={['top', 'left', 'right']}>
+        <KeyboardAvoidingView
+          style={tw`flex-1`}
+          behavior="padding"
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        >
+          {/* HEADER */}
+          <View style={tw`flex-row items-center px-3 py-3 bg-slate-800 border-b border-white/10`}>
+            <TouchableOpacity style={tw`p-2 mr-1`} onPress={() => setSalaActiva(null)}>
+              <Ionicons name="arrow-back" size={24} color="#fff" />
+            </TouchableOpacity>
 
-              <TouchableOpacity
-                style={tw`flex-1 flex-row items-center`}
-                activeOpacity={0.7}
-                onPress={() => {
-                  if (datosChatActivo.esGrupo) {
-                    setModalIntegrantesVisible(true);
-                  } else if (datosChatActivo.otroUsuarioId) {
-                    handleAbrirPerfil(datosChatActivo.otroUsuarioId);
-                  }
-                }}
-              >
-                <Image source={{ uri: datosChatActivo.avatar }} style={tw`w-10 h-10 rounded-full bg-slate-700`} />
-                <View style={{ flex: 1, marginLeft: 10 }}>
-                  <Text style={tw`text-base font-bold text-white`} numberOfLines={1}>
+            <TouchableOpacity
+              style={tw`flex-1 flex-row items-center`}
+              activeOpacity={0.7}
+              onPress={() => {
+                if (datosChatActivo.esGrupo) {
+                  setModalIntegrantesVisible(true);
+                } else if (datosChatActivo.otroUsuarioId) {
+                  handleAbrirPerfil(datosChatActivo.otroUsuarioId);
+                }
+              }}
+            >
+              <Image source={{ uri: datosChatActivo.avatar }} style={tw`w-10 h-10 rounded-full bg-slate-700`} />
+              <View style={{ flex: 1, marginLeft: 10 }}>
+                <View style={tw`flex-row items-center`}>
+                  <Text style={tw`text-base font-bold text-white mr-1`} numberOfLines={1}>
                     {datosChatActivo.nombre}
                   </Text>
-                  <Text style={tw`text-[11px] text-slate-400 mt-0.5`} numberOfLines={1}>
-                    {datosChatActivo.esGrupo
-                      ? `${integrantes.length} integrantes · Toca para ver`
-                      : 'Toca para ver perfil'}
-                  </Text>
+                  {!datosChatActivo.esGrupo && datosChatActivo.otroVerificado && (
+                    <Text style={tw`text-emerald-400 font-bold text-xs`}>✓</Text>
+                  )}
                 </View>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={tw`p-2 bg-slate-900 rounded-xl ml-2`}
-                onPress={() => {
-                  if (datosChatActivo.esGrupo) {
-                    setModalIntegrantesVisible(true);
-                  } else if (datosChatActivo.otroUsuarioId) {
-                    handleAbrirPerfil(datosChatActivo.otroUsuarioId);
-                  }
-                }}
-              >
-                <Ionicons
-                  name={datosChatActivo.esGrupo ? 'people-outline' : 'person-outline'}
-                  size={22}
-                  color="#6366f1"
-                />
-              </TouchableOpacity>
-            </View>
-
-            <View style={tw`flex-1 px-3`}>
-              {cargandoMensajes ? (
-                <View style={tw`flex-1 justify-center items-center`}>
-                  <ActivityIndicator size="large" color="#6366f1" />
-                </View>
-              ) : (
-                <FlatList
-                  ref={flatListRef}
-                  data={mensajes}
-                  keyExtractor={(item, index) => item.id?.toString() || index.toString()}
-                  renderItem={renderMensaje}
-                  contentContainerStyle={tw.style('py-4', { gap: 10 })}
-                  onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-                />
-              )}
-            </View>
-
-            <View style={tw.style('flex-row items-center p-3 bg-slate-800 border-t border-white/10', { gap: 8 })}>
-              <TextInput
-                style={tw`flex-1 bg-slate-900 rounded-full px-4 py-2.5 text-white text-sm`}
-                placeholder="Escribí un mensaje..."
-                placeholderTextColor="#64748b"
-                value={nuevoMensaje}
-                onChangeText={setNuevoMensaje}
-              />
-              <TouchableOpacity style={tw`bg-indigo-500 w-[42px] h-[42px] rounded-full justify-center items-center`} onPress={handleEnviarMensaje}>
-                <Ionicons name="send" size={18} color="#fff" />
-              </TouchableOpacity>
-            </View>
-          </View>
-        </TouchableWithoutFeedback>
-
-        <Modal visible={modalIntegrantesVisible} transparent animationType="slide">
-          <View style={tw`flex-1 bg-black/70 justify-center p-5`}>
-            <View style={tw`bg-slate-800 rounded-2xl p-4.5 max-h-[70%] border border-white/10`}>
-              <View style={tw`flex-row justify-between items-center mb-3`}>
-                <Text style={tw`text-lg font-bold text-white`}>Integrantes del Grupo</Text>
-                <TouchableOpacity onPress={() => setModalIntegrantesVisible(false)}>
-                  <Ionicons name="close-circle-outline" size={26} color="#64748b" />
-                </TouchableOpacity>
+                <Text style={tw`text-[11px] text-slate-400 mt-0.5`} numberOfLines={1}>
+                  {datosChatActivo.esGrupo
+                    ? `${integrantes.length} integrantes · Toca para ver`
+                    : 'Toca para ver perfil'}
+                </Text>
               </View>
+            </TouchableOpacity>
 
-              <FlatList
-                data={integrantes}
-                keyExtractor={(item) => item.id.toString()}
-                renderItem={({ item }) => {
-                  const esMiUsuario = Number(item.id) === Number(miUsuario?.id || miUsuario?.usuario?.id);
-
-                  return (
-                    <TouchableOpacity
-                      style={tw.style('flex-row items-center bg-slate-900 p-2.5 rounded-xl border border-white/5', esMiUsuario && 'opacity-70')}
-                      activeOpacity={esMiUsuario ? 1 : 0.7}
-                      disabled={esMiUsuario}
-                      onPress={() => handleAbrirPerfil(item.id)}
-                    >
-                      <Image source={{ uri: item.foto_perfil }} style={tw`w-10 h-10 rounded-full bg-slate-700`} />
-                      <View style={{ flex: 1, marginLeft: 12 }}>
-                        <Text style={tw`text-white text-base font-semibold`}>{item.username}</Text>
-                        <Text style={tw`text-slate-400 text-xs mt-0.5`}>{`🏆 ${item.rango}`}</Text>
-                      </View>
-                      {esMiUsuario ? (
-                        <Text style={tw`bg-indigo-500 text-white text-[11px] font-bold px-2 py-1 rounded-md`}>Tú</Text>
-                      ) : (
-                        <Ionicons name="person-circle-outline" size={22} color="#6366f1" />
-                      )}
-                    </TouchableOpacity>
-                  );
-                }}
-                contentContainerStyle={{ gap: 10, paddingVertical: 10 }}
+            <TouchableOpacity
+              style={tw`p-2 bg-slate-900 rounded-xl ml-2`}
+              onPress={() => {
+                if (datosChatActivo.esGrupo) {
+                  setModalIntegrantesVisible(true);
+                } else if (datosChatActivo.otroUsuarioId) {
+                  handleAbrirPerfil(datosChatActivo.otroUsuarioId);
+                }
+              }}
+            >
+              <Ionicons
+                name={datosChatActivo.esGrupo ? 'people-outline' : 'person-outline'}
+                size={22}
+                color="#6366f1"
               />
-            </View>
+            </TouchableOpacity>
           </View>
-        </Modal>
 
-        <ModalPerfilUsuario
-          visible={modalPerfilVisible}
-          usuarioId={usuarioSeleccionadoId}
-          usuarioActual={miUsuario}
-          onClose={() => setModalPerfilVisible(false)}
-          deshabilitarChat={true}
-          onIrAlChat={(salaNueva) => {
-            setModalPerfilVisible(false);
-            if (salaNueva) {
-              cargarSalas().then(() => seleccionarSala(salaNueva));
-            }
-          }}
-        />
-      </KeyboardAvoidingView>
+          {/* BANNER DE VERIFICACIÓN */}
+          {!datosChatActivo.esGrupo && datosChatActivo.otroUsuarioId ? (
+            <View
+              style={tw.style(
+                'px-3 py-2 flex-row items-center border-b',
+                datosChatActivo.otroVerificado
+                  ? 'bg-emerald-500/10 border-emerald-500/20'
+                  : 'bg-amber-500/10 border-amber-500/20'
+              )}
+            >
+              <Text style={tw`text-xs mr-2`}>{datosChatActivo.otroVerificado ? '✅' : '⚠️'}</Text>
+              <Text
+                style={tw.style(
+                  'text-[11px] flex-1 leading-4',
+                  datosChatActivo.otroVerificado ? 'text-emerald-300' : 'text-amber-300'
+                )}
+              >
+                <Text style={tw`font-bold`}>{datosChatActivo.nombre} </Text>
+                {datosChatActivo.otroVerificado
+                  ? 'verificó su identidad por cámara.'
+                  : 'aún no ha verificado su edad con la webcam. Tené cuidado.'}
+              </Text>
+            </View>
+          ) : null}
+
+          {/* LISTA DE MENSAJES */}
+          <View style={tw`flex-1 px-3`}>
+            {cargandoMensajes ? (
+              <View style={tw`flex-1 justify-center items-center`}>
+                <ActivityIndicator size="large" color="#6366f1" />
+              </View>
+            ) : (
+              <FlatList
+                ref={flatListRef}
+                style={tw`flex-1`}
+                data={mensajes}
+                keyExtractor={(item, index) => item.id?.toString() || index.toString()}
+                renderItem={renderMensaje}
+                contentContainerStyle={tw.style('py-4', { gap: 10, flexGrow: 1 })}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
+                onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+              />
+            )}
+          </View>
+
+          {/* INPUT DE MENSAJE FIJO AL PIE */}
+          <View style={tw`flex-row items-center p-3 bg-slate-800 border-t border-white/10`}>
+            <TextInput
+              style={tw`flex-1 bg-slate-900 rounded-full px-4 py-2.5 text-white text-sm mr-2`}
+              placeholder="Escribí un mensaje..."
+              placeholderTextColor="#64748b"
+              value={nuevoMensaje}
+              onChangeText={setNuevoMensaje}
+              returnKeyType="send"
+              blurOnSubmit={false}
+              onSubmitEditing={handleEnviarMensaje}
+            />
+            <TouchableOpacity
+              style={tw`bg-indigo-500 w-[42px] h-[42px] rounded-full justify-center items-center`}
+              onPress={handleEnviarMensaje}
+            >
+              <Ionicons name="send" size={18} color="#fff" />
+            </TouchableOpacity>
+          </View>
+
+          {/* MODAL INTEGRANTES */}
+          <Modal visible={modalIntegrantesVisible} transparent animationType="slide">
+            <View style={tw`flex-1 bg-black/70 justify-center p-5`}>
+              <View style={tw`bg-slate-800 rounded-2xl p-4.5 max-h-[70%] border border-white/10`}>
+                <View style={tw`flex-row justify-between items-center mb-3`}>
+                  <Text style={tw`text-lg font-bold text-white`}>Integrantes del Grupo</Text>
+                  <TouchableOpacity onPress={() => setModalIntegrantesVisible(false)}>
+                    <Ionicons name="close-circle-outline" size={26} color="#64748b" />
+                  </TouchableOpacity>
+                </View>
+
+                <FlatList
+                  data={integrantes}
+                  keyExtractor={(item) => item.id.toString()}
+                  renderItem={({ item }) => {
+                    const esMiUsuario = Number(item.id) === Number(miUsuario?.id || miUsuario?.usuario?.id);
+
+                    return (
+                      <TouchableOpacity
+                        style={tw.style('flex-row items-center bg-slate-900 p-2.5 rounded-xl border border-white/5', esMiUsuario && 'opacity-70')}
+                        activeOpacity={esMiUsuario ? 1 : 0.7}
+                        disabled={esMiUsuario}
+                        onPress={() => handleAbrirPerfil(item.id)}
+                      >
+                        <Image source={{ uri: item.foto_perfil }} style={tw`w-10 h-10 rounded-full bg-slate-700`} />
+                        <View style={{ flex: 1, marginLeft: 12 }}>
+                          <View style={tw`flex-row items-center`}>
+                            <Text style={tw`text-white text-base font-semibold`}>{item.username}</Text>
+                            {item.verificado ? (
+                              <Text style={tw`text-emerald-400 text-xs font-bold ml-1.5`}>✓</Text>
+                            ) : null}
+                          </View>
+                          <Text style={tw`text-slate-400 text-xs mt-0.5`}>{`🏆 ${item.rango}`}</Text>
+                        </View>
+                        {esMiUsuario ? (
+                          <Text style={tw`bg-indigo-500 text-white text-[11px] font-bold px-2 py-1 rounded-md`}>Tú</Text>
+                        ) : (
+                          <Ionicons name="person-circle-outline" size={22} color="#6366f1" />
+                        )}
+                      </TouchableOpacity>
+                    );
+                  }}
+                  contentContainerStyle={{ gap: 10, paddingVertical: 10 }}
+                />
+              </View>
+            </View>
+          </Modal>
+
+          <ModalPerfilUsuario
+            visible={modalPerfilVisible}
+            usuarioId={usuarioSeleccionadoId}
+            usuarioActual={miUsuario}
+            onClose={() => setModalPerfilVisible(false)}
+            deshabilitarChat={true}
+            onIrAlChat={(salaNueva) => {
+              setModalPerfilVisible(false);
+              if (salaNueva) {
+                cargarSalas().then(() => seleccionarSala(salaNueva));
+              }
+            }}
+          />
+        </KeyboardAvoidingView>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={tw`flex-1 bg-slate-900`}>
-      <View style={tw`pt-14 px-5 pb-4 bg-slate-800 border-b border-white/10`}>
-        <Text style={tw`text-2xl font-bold text-white`}>Chats</Text>
+    <SafeAreaView style={tw`flex-1 bg-slate-900`} edges={['top', 'left', 'right']}>
+      <View style={tw`px-5 py-4 bg-slate-800 border-b border-white/10`}>
+        <Text style={tw`text-2xl font-bold text-white mb-3`}>Chats</Text>
+
+        <View style={tw`relative`}>
+          <TextInput
+            style={tw`bg-slate-900 rounded-xl px-3.5 py-2.5 text-white text-sm border border-white/10`}
+            placeholder="Buscar jugador para chatear..."
+            placeholderTextColor="#64748b"
+            value={busqueda}
+            onChangeText={handleBuscar}
+          />
+          {cargandoSugerencias && <ActivityIndicator size="small" color="#6366f1" style={tw`absolute right-3 top-3`} />}
+        </View>
       </View>
+
+      {sugerencias.length > 0 && (
+        <View style={tw`bg-slate-800 border-b border-indigo-500/50 max-h-[220px] px-3 py-2`}>
+          <Text style={tw`text-indigo-400 text-[11px] font-bold uppercase tracking-wider mb-2 px-1`}>Jugadores encontrados</Text>
+          <FlatList
+            data={sugerencias}
+            keyExtractor={(item) => String(item.id)}
+            keyboardShouldPersistTaps="handled"
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                onPress={() => iniciarChatConUsuario(item)}
+                style={tw`flex-row items-center justify-between p-2 rounded-lg bg-slate-900/60 mb-1 border border-white/5`}
+              >
+                <View style={tw`flex-row items-center flex-1 mr-2`}>
+                  <Image
+                    source={{ uri: item.foto_perfil || 'https://via.placeholder.com/150' }}
+                    style={tw`w-8 h-8 rounded-full bg-slate-700 mr-2.5`}
+                  />
+                  <Text style={tw`text-white font-semibold text-sm`}>@{item.username}</Text>
+                </View>
+                <Text style={tw`text-indigo-400 font-bold text-xs bg-indigo-500/10 px-2.5 py-1 rounded-md`}>Escribir</Text>
+              </TouchableOpacity>
+            )}
+          />
+        </View>
+      )}
 
       {cargandoSalas ? (
         <View style={tw`flex-1 justify-center items-center`}>
           <ActivityIndicator size="large" color="#6366f1" />
         </View>
       ) : salas.length === 0 ? (
-        <View style={tw`flex-1 justify-center items-center`}>
+        <View style={tw`flex-1 justify-center items-center px-6`}>
           <Ionicons name="chatbubbles-outline" size={54} color="#475569" />
-          <Text style={tw`text-slate-500 mt-3 text-base font-medium`}>No tenés conversaciones activas</Text>
+          <Text style={tw`text-slate-400 mt-3 text-base font-medium text-center`}>No tenés conversaciones activas</Text>
+          <Text style={tw`text-slate-600 text-xs text-center mt-1`}>Usá el buscador superior para iniciar un chat con cualquier jugador</Text>
         </View>
       ) : (
         <FlatList
@@ -570,6 +722,6 @@ export default function SalasScreen({ route, navigation }) {
           }
         }}
       />
-    </View>
+    </SafeAreaView>
   );
 }

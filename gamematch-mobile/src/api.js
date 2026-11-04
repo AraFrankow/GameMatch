@@ -51,6 +51,10 @@ api.interceptors.response.use(
 );
 
 export const usuariosApi = {
+  obtenerPerfil: async (usuarioId) => {
+    const { data } = await api.get(`/perfil/${usuarioId}`);
+    return data;
+  },
   bloquear: async (bloqueado_id) => {
     const { data } = await api.post('/bloqueos', { bloqueado_id });
     return data;
@@ -142,6 +146,11 @@ export const authApi = {
   },
   verificarEdad: async (imagenBase64) => {
     const { data } = await api.post('/usuarios/verificar-edad', { imagen: imagenBase64 });
+    return data;
+  },
+  buscarJuegosSteam: async (arg1, arg2) => {
+    const q = typeof arg2 === 'string' ? arg2 : typeof arg1 === 'string' ? arg1 : '';
+    const { data } = await api.get(`/juegos/steam-autocomplete?q=${encodeURIComponent(q)}`);
     return data;
   },
 };
