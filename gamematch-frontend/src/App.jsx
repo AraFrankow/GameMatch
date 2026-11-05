@@ -9,6 +9,10 @@ import ModalPerfilUsuario from './components/ModalPerfilUsuario';
 import { socket } from './socket';
 import ModalBloqueados from './components/ModalBloqueados';
 import AdminPanel from './components/admin/AdminPanel';
+import Footer from './components/Footer';
+import PoliticaPrivacidad from './components/PoliticaPrivacidad';
+import TerminosServicio from './components/TerminosServicio';
+import ModalPadres from './components/ModalPadres';
 import { createPortal } from 'react-dom';
 
 const RANGOS_EDAD = [
@@ -17,7 +21,22 @@ const RANGOS_EDAD = [
   { value: '26_35', label: '26 a 35' },
   { value: '36_mas', label: '36 o más' },
 ];
-const FORM_INICIAL = { username: '', email: '', password: '', rango_edad: '18_25' };
+
+const MODOS_JUEGO = [
+  { value: 'casual', label: 'Casual' },
+  { value: 'competitivo', label: 'Competitivo' },
+  { value: 'ambos', label: 'Ambos' },
+];
+
+const FORM_INICIAL = {
+  username: '',
+  email: '',
+  password: '',
+  confirmPassword: '',
+  rango_edad: '18_25',
+  modo_juego: 'casual',
+  aceptaTerminos: false,
+};
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
@@ -25,7 +44,10 @@ function Campo({ label, ...props }) {
   return (
     <label className="block mb-3">
       <span className="block text-sm text-white/60 mb-1">{label}</span>
-      <input {...props} className="w-full bg-surface border border-white/10 rounded-lg px-3 py-2 text-white outline-none focus:border-primary focus:ring-1 focus:ring-primary transition" />
+      <input
+        {...props}
+        className="w-full bg-surface border border-white/10 rounded-lg px-3 py-2 text-white outline-none focus:border-primary focus:ring-1 focus:ring-primary transition"
+      />
     </label>
   );
 }
@@ -35,6 +57,7 @@ export default function App() {
   const incrementarRefresco = () => setRefrescoKey((prev) => prev + 1);
   const [modo, setModo] = useState('login');
   const [form, setForm] = useState(FORM_INICIAL);
+  const [mostrarPadres, setMostrarPadres] = useState(false);
 
   const [sesion, setSesion] = useState(() => {
     const token = localStorage.getItem('gm_token');
@@ -60,6 +83,7 @@ export default function App() {
   const [cargando, setCargando] = useState(false);
   const [googlePendiente, setGooglePendiente] = useState(null);
   const [rangoGoogle, setRangoGoogle] = useState('18_25');
+  const [modoJuegoGoogle, setModoJuegoGoogle] = useState('casual');
   const [notificaciones, setNotificaciones] = useState([]);
   const [mostrarBloqueados, setMostrarBloqueados] = useState(false);
   const [mensajesNoLeidos, setMensajesNoLeidos] = useState({});
@@ -68,7 +92,6 @@ export default function App() {
   const vistaRef = useRef(vista);
   const salaActivaIdRef = useRef(salaActivaId);
   const sesionRef = useRef(sesion);
-  
   const estadoActualRef = useRef(sesion?.usuario?.estado || 'conectado');
 
   useEffect(() => { vistaRef.current = vista; }, [vista]);
@@ -118,7 +141,6 @@ export default function App() {
     setPerfilVerId(idUsuario);
   };
 
-  // PAGO DE STRIPE
   useEffect(() => {
     if (!sesion?.token) return;
 
@@ -163,6 +185,7 @@ export default function App() {
             p && (
               p.verificado !== sesion.usuario?.verificado || 
               p.rango_edad !== sesion.usuario?.rango_edad ||
+              p.modo_juego !== sesion.usuario?.modo_juego ||
               p.es_premium !== sesion.usuario?.es_premium
             )
           ) {
@@ -300,14 +323,32 @@ export default function App() {
     }
   };
 
-  const actualizarCampo = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+  const actualizarCampo = (e) => {
+    const valor = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+    setForm({ ...form, [e.target.name]: valor });
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+
+    if (modo === 'registro') {
+      if (form.password.length < 8) {
+        return setError('La contraseña debe tener al menos 8 caracteres.');
+      }
+      if (form.password !== form.confirmPassword) {
+        return setError('Las contraseñas no coinciden.');
+      }
+      if (!form.aceptaTerminos) {
+        return setError('Debés aceptar los Términos de Servicio y la Política de Privacidad.');
+      }
+    }
+
     setCargando(true);
     try {
-      const data = modo === 'registro' ? await authApi.registro(form) : await authApi.login({ email: form.email, password: form.password });
+      const data = modo === 'registro' 
+        ? await authApi.registro(form) 
+        : await authApi.login({ email: form.email, password: form.password });
       guardarSesion(data.token, data.usuario);
     } catch (err) {
       setError(err.message);
@@ -322,16 +363,16 @@ export default function App() {
       const data = await authApi.google({ id_token: credentialResponse.credential });
       guardarSesion(data.token, data.usuario);
     } catch (err) {
-      if (err.message.includes('rango_edad')) setGooglePendiente(credentialResponse.credential);
+      if (err.message.includes('rango_edad') || err.message.includes('modo_juego')) setGooglePendiente(credentialResponse.credential);
       else setError(err.message);
     }
   };
 
-  const completarGoogleConEdad = async () => {
+  const completarGoogleConDatos = async () => {
     setError('');
     setCargando(true);
     try {
-      const data = await authApi.google({ id_token: googlePendiente, rango_edad: rangoGoogle });
+      const data = await authApi.google({ id_token: googlePendiente, rango_edad: rangoGoogle, modo_juego: modoJuegoGoogle });
       guardarSesion(data.token, data.usuario);
       setGooglePendiente(null);
     } catch (err) {
@@ -362,17 +403,47 @@ export default function App() {
   if (!sesion) {
     if (vista === 'landing') {
       return (
-        <Landing
-          onNavigateToLogin={() => { setModo('login'); resetearFormulario(); setVista('auth'); }}
-          onNavigateToRegister={() => { setModo('registro'); resetearFormulario(); setVista('auth'); }}
-        />
+        <>
+          <Landing
+            onNavigateToLogin={() => { setModo('login'); resetearFormulario(); setVista('auth'); }}
+            onNavigateToRegister={() => { setModo('registro'); resetearFormulario(); setVista('auth'); }}
+          />
+          {mostrarPadres && createPortal(
+            <ModalPadres onClose={() => setMostrarPadres(false)} />,
+            document.body
+          )}
+        </>
+      );
+    }
+
+    if (vista === 'privacidad') {
+      return (
+        <>
+          <PoliticaPrivacidad onVolver={() => setVista('auth')} />
+          {mostrarPadres && createPortal(
+            <ModalPadres onClose={() => setMostrarPadres(false)} />,
+            document.body
+          )}
+        </>
+      );
+    }
+
+    if (vista === 'terminos') {
+      return (
+        <>
+          <TerminosServicio onVolver={() => setVista('auth')} />
+          {mostrarPadres && createPortal(
+            <ModalPadres onClose={() => setMostrarPadres(false)} />,
+            document.body
+          )}
+        </>
       );
     }
 
     return (
       <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
-        <div className="min-h-screen bg-gm-gradient flex flex-col items-center justify-center p-4">
-          <div className="w-full max-w-sm">
+        <div className="min-h-screen bg-gm-gradient flex flex-col justify-between p-4">
+          <div className="w-full max-w-sm mx-auto my-auto py-8">
             <button
               onClick={() => setVista('landing')}
               className="text-white/60 hover:text-white text-xs mb-4 flex items-center gap-1 transition"
@@ -385,14 +456,23 @@ export default function App() {
             <div className="bg-card border border-white/10 rounded-2xl p-6 shadow-xl">
               {googlePendiente ? (
                 <div>
-                  <p className="text-white text-sm mb-4">Es tu primera vez con esta cuenta de Google. Elegí tu rango de edad para terminar de crear tu cuenta.</p>
-                  <label className="block mb-4">
+                  <p className="text-white text-sm mb-4">Es tu primera vez con esta cuenta de Google. Elegí tu rango de edad y modo de juego para terminar de crear tu cuenta.</p>
+                  
+                  <label className="block mb-3">
                     <span className="block text-sm text-white/60 mb-1">Rango de edad</span>
                     <select value={rangoGoogle} onChange={(e) => setRangoGoogle(e.target.value)} className="w-full bg-surface border border-white/10 rounded-lg px-3 py-2 text-white">
                       {RANGOS_EDAD.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
                     </select>
                   </label>
-                  <button onClick={completarGoogleConEdad} disabled={cargando} className="w-full bg-primary hover:bg-primary/90 text-white font-medium rounded-lg py-2 transition disabled:opacity-50">
+
+                  <label className="block mb-4">
+                    <span className="block text-sm text-white/60 mb-1">Modo de juego</span>
+                    <select value={modoJuegoGoogle} onChange={(e) => setModoJuegoGoogle(e.target.value)} className="w-full bg-surface border border-white/10 rounded-lg px-3 py-2 text-white">
+                      {MODOS_JUEGO.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                    </select>
+                  </label>
+
+                  <button onClick={completarGoogleConDatos} disabled={cargando} className="w-full bg-primary hover:bg-primary/90 text-white font-medium rounded-lg py-2 transition disabled:opacity-50">
                     {cargando ? 'Creando cuenta...' : 'Continuar'}
                   </button>
                 </div>
@@ -407,13 +487,66 @@ export default function App() {
                     {modo === 'registro' && <Campo label="Nombre de usuario" name="username" value={form.username} onChange={actualizarCampo} required />}
                     <Campo label="Email" type="email" name="email" value={form.email} onChange={actualizarCampo} required />
                     <Campo label="Contraseña" type="password" name="password" value={form.password} onChange={actualizarCampo} required />
+                    
                     {modo === 'registro' && (
-                      <label className="block mb-4">
-                        <span className="block text-sm text-white/60 mb-1">Rango de edad</span>
-                        <select name="rango_edad" value={form.rango_edad} onChange={actualizarCampo} className="w-full bg-surface border border-white/10 rounded-lg px-3 py-2 text-white">
-                          {RANGOS_EDAD.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
-                        </select>
-                      </label>
+                      <Campo label="Confirmar contraseña" type="password" name="confirmPassword" value={form.confirmPassword} onChange={actualizarCampo} required />
+                    )}
+
+                    {modo === 'registro' && (
+                      <>
+                        <label className="block mb-3">
+                          <span className="block text-sm text-white/60 mb-1">Rango de edad</span>
+                          <select name="rango_edad" value={form.rango_edad} onChange={actualizarCampo} className="w-full bg-surface border border-white/10 rounded-lg px-3 py-2 text-white">
+                            {RANGOS_EDAD.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+                          </select>
+                        </label>
+
+                        <label className="block mb-4">
+                          <span className="block text-sm text-white/60 mb-1">Modo de juego</span>
+                          <select name="modo_juego" value={form.modo_juego} onChange={actualizarCampo} className="w-full bg-surface border border-white/10 rounded-lg px-3 py-2 text-white">
+                            {MODOS_JUEGO.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                          </select>
+                        </label>
+
+                        {/* CHECKBOX DE TÉRMINOS Y MENORES */}
+                        <div className="flex items-start gap-2 mb-4 select-none">
+                          <input
+                            type="checkbox"
+                            id="aceptaTerminos"
+                            name="aceptaTerminos"
+                            checked={form.aceptaTerminos}
+                            onChange={actualizarCampo}
+                            className="mt-0.5 rounded bg-surface border-white/20 text-primary focus:ring-0 cursor-pointer"
+                          />
+                          <label htmlFor="aceptaTerminos" className="text-xs text-white/70 leading-tight cursor-pointer">
+                            Acepto los{' '}
+                            <button 
+                              type="button" 
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setVista('terminos'); }} 
+                              className="text-primary underline"
+                            >
+                              Términos
+                            </button>{' '}
+                            y la{' '}
+                            <button 
+                              type="button" 
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setVista('privacidad'); }} 
+                              className="text-primary underline"
+                            >
+                              Privacidad
+                            </button>
+                            . Si soy menor, confirmo supervisión parental ({' '}
+                            <button 
+                              type="button" 
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setMostrarPadres(true); }} 
+                              className="text-amber-400 underline font-medium"
+                            >
+                              ver info para padres
+                            </button>
+                            ).
+                          </label>
+                        </div>
+                      </>
                     )}
 
                     {error && (
@@ -448,6 +581,17 @@ export default function App() {
               )}
             </div>
           </div>
+
+          <Footer 
+            onAbrirPrivacidad={() => setVista('privacidad')} 
+            onAbrirTerminos={() => setVista('terminos')} 
+            onAbrirPadres={() => setMostrarPadres(true)}
+          />
+
+          {mostrarPadres && createPortal(
+            <ModalPadres onClose={() => setMostrarPadres(false)} />,
+            document.body
+          )}
         </div>
       </GoogleOAuthProvider>
     );
@@ -569,8 +713,18 @@ export default function App() {
               onActualizarUsuario={handleActualizarUsuario}
               onVolver={() => setVista('busqueda')}
             />
+          ) : vista === 'privacidad' ? (
+            <PoliticaPrivacidad onVolver={() => setVista('busqueda')} />
+          ) : vista === 'terminos' ? (
+            <TerminosServicio onVolver={() => setVista('busqueda')} />
           ) : null}
         </main>
+
+        <Footer 
+          onAbrirPrivacidad={() => setVista('privacidad')} 
+          onAbrirTerminos={() => setVista('terminos')} 
+          onAbrirPadres={() => setMostrarPadres(true)}
+        />
 
         {mostrarBloqueados && createPortal(
           <ModalBloqueados
@@ -593,6 +747,11 @@ export default function App() {
               if (sala?.id) setSalaActivaId(sala.id);
             }}
           />,
+          document.body
+        )}
+
+        {mostrarPadres && createPortal(
+          <ModalPadres onClose={() => setMostrarPadres(false)} />,
           document.body
         )}
       </div>

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { authApi } from '../api';
+import Modal from './Modal';
 
 const ETIQUETAS_POSITIVAS = ['Buen compañero', 'Juega en equipo', 'Buena onda'];
 const ETIQUETAS_NEGATIVAS = ['Tóxico', 'AFK', 'Jugador Individualista', 'Troll'];
@@ -39,15 +40,8 @@ export default function ModalCalificarJugador({ token, jugador, onClose, onCalif
   const listaEtiquetas = tipo === 'positiva' ? ETIQUETAS_POSITIVAS : ETIQUETAS_NEGATIVAS;
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
-      <div className="bg-card border border-white/10 rounded-2xl p-6 w-full max-w-md relative shadow-2xl space-y-4 text-left">
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 text-white/50 hover:text-white text-lg transition"
-        >
-          ✕
-        </button>
-
+    <Modal isOpen={Boolean(jugador)} onClose={onClose}>
+      <div className="space-y-4 text-left">
         <div className="text-center space-y-1">
           <h3 className="text-lg font-bold text-white">Calificar a {jugador.username}</h3>
           <p className="text-xs text-white/50">Evaluá tu experiencia de juego reciente.</p>
@@ -63,7 +57,7 @@ export default function ModalCalificarJugador({ token, jugador, onClose, onCalif
                 setTipo('positiva');
                 setEtiqueta('');
               }}
-              className={`py-2.5 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-2 ${
+              className={`py-2.5 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
                 tipo === 'positiva'
                   ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.2)]'
                   : 'bg-surface/50 text-white/40 border-white/5 hover:text-white'
@@ -78,7 +72,7 @@ export default function ModalCalificarJugador({ token, jugador, onClose, onCalif
                 setTipo('negativa');
                 setEtiqueta('');
               }}
-              className={`py-2.5 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-2 ${
+              className={`py-2.5 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
                 tipo === 'negativa'
                   ? 'bg-red-500/20 text-red-300 border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.2)]'
                   : 'bg-surface/50 text-white/40 border-white/5 hover:text-white'
@@ -96,7 +90,7 @@ export default function ModalCalificarJugador({ token, jugador, onClose, onCalif
                   key={item}
                   type="button"
                   onClick={() => setEtiqueta(etiqueta === item ? '' : item)}
-                  className={`text-[11px] px-2.5 py-1 rounded-lg border transition ${
+                  className={`text-[11px] px-2.5 py-1 rounded-lg border transition cursor-pointer ${
                     etiqueta === item
                       ? tipo === 'positiva'
                         ? 'bg-emerald-500 text-black border-emerald-400 font-bold'
@@ -126,20 +120,20 @@ export default function ModalCalificarJugador({ token, jugador, onClose, onCalif
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 bg-surface hover:bg-white/10 text-white/70 text-xs py-2.5 rounded-xl transition"
+              className="flex-1 bg-surface hover:bg-white/10 text-white/70 text-xs py-2.5 rounded-xl transition cursor-pointer"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={cargando}
-              className="flex-1 bg-primary hover:bg-primary/90 text-white font-medium text-xs py-2.5 rounded-xl transition shadow-lg disabled:opacity-50"
+              className="flex-1 bg-primary hover:bg-primary/90 text-white font-medium text-xs py-2.5 rounded-xl transition shadow-lg disabled:opacity-50 cursor-pointer"
             >
               {cargando ? 'Enviando...' : 'Guardar calificación'}
             </button>
           </div>
         </form>
       </div>
-    </div>
+    </Modal>
   );
 }

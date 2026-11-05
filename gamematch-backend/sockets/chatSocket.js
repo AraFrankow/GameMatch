@@ -33,8 +33,6 @@ const registrarChatSocket = (io) => {
 
   io.on('connection', async (socket) => {
     const uid = socket.usuario.id;
-    console.log(`🔌 Socket conectado: ${socket.usuario.username} (id ${uid})`);
-
     socket.join(`usuario_${uid}`);
     socket.join(`usuario_${Number(uid)}`);
 
@@ -194,7 +192,6 @@ const registrarChatSocket = (io) => {
     });
 
     socket.on('disconnect', () => {
-      console.log(`Socket desconectado: ${socket.usuario.username}`);
       usuariosVozPorSala.forEach((mapaUsuarios, sid) => {
         if (mapaUsuarios.has(uid)) {
           mapaUsuarios.delete(uid);

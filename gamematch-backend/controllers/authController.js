@@ -39,7 +39,7 @@ const usuarioPublico = (u) => ({
 
 const registro = async (req, res) => {
   try {
-    const { username, email, password, rango_edad } = req.body;
+    const { username, email, password, rango_edad, modo_juego } = req.body;
     if (!username || !email || !password || !rango_edad) {
       return res.status(400).json({ error: 'username, email, password y rango_edad son obligatorios' });
     }
@@ -49,7 +49,13 @@ const registro = async (req, res) => {
     if (await Usuario.findOne({ where: { username } })) return res.status(409).json({ error: 'Ese nombre de usuario ya está en uso' });
 
     const password_hash = await bcrypt.hash(password, SALT_ROUNDS);
-    const usuario = await Usuario.create({ username, email, password_hash, rango_edad });
+    const usuario = await Usuario.create({
+      username,
+      email,
+      password_hash,
+      rango_edad,
+      modo_juego: modo_juego || 'casual',
+    });
     const token = generarToken({ id: usuario.id, rol: usuario.rol });
 
     return res.status(201).json({ usuario: usuarioPublico(usuario), token });
@@ -81,7 +87,7 @@ const login = async (req, res) => {
 
 const googleAuth = async (req, res) => {
   try {
-    const { id_token, rango_edad } = req.body;
+    const { id_token, rango_edad, modo_juego } = req.body;
 
     if (!id_token) {
       return res.status(400).json({ error: 'Se requiere id_token' });
@@ -97,8 +103,8 @@ const googleAuth = async (req, res) => {
     let usuario = await Usuario.findOne({ where: { email } });
 
     if (!usuario) {
-      if (!rango_edad) {
-        return res.status(400).json({ error: 'rango_edad' });
+      if (!rango_edad || !modo_juego) {
+        return res.status(400).json({ error: 'rango_edad y modo_juego son requeridos para la creación de cuenta.' });
       }
 
       usuario = await Usuario.create({
@@ -106,6 +112,7 @@ const googleAuth = async (req, res) => {
         email,
         foto_perfil: picture,
         rango_edad,
+        modo_juego: modo_juego || 'casual',
         google_id: sub,
       });
     }
@@ -131,7 +138,7 @@ const googleAuth = async (req, res) => {
 const actualizarPerfil = async (req, res) => {
   try {
     const usuarioId = req.usuario.id;
-    const { username, foto_perfil, rango_edad, biografia } = req.body;
+    const { username, foto_perfil, rango_edad, modo_juego, biografia } = req.body;
 
     const usuarioActual = await Usuario.findByPk(usuarioId);
     if (!usuarioActual) return res.status(404).json({ error: 'Usuario no encontrado' });
@@ -149,6 +156,7 @@ const actualizarPerfil = async (req, res) => {
     if (username !== undefined) cambios.username = username;
     if (foto_perfil !== undefined) cambios.foto_perfil = foto_perfil;
     if (rango_edad !== undefined) cambios.rango_edad = rango_edad;
+    if (modo_juego !== undefined) cambios.modo_juego = modo_juego;
     if (biografia !== undefined) cambios.biografia = biografia;
 
     await usuarioActual.update(cambios);

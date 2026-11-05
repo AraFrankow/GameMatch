@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { authApi } from '../api';
+import Modal from './Modal';
 import TarjetaRiot from './TarjetaRiot';
 import TarjetaSteam from './TarjetaSteam';
 import BadgeSinergia from './BadgeSinergia';
@@ -16,6 +17,12 @@ const ESTADO_LABEL = {
   conectado: 'Conectado',
   ausente: 'Ausente',
   desconectado: 'Desconectado',
+};
+
+const MODOS_LABEL = {
+  casual: 'Casual',
+  competitivo: 'Competitivo',
+  ambos: 'Casual & Competitivo',
 };
 
 function InsigniasUsuario({ usuario }) {
@@ -37,6 +44,15 @@ function InsigniasUsuario({ usuario }) {
       >
         {labelEdad}
       </span>
+
+      {usuario.modo_juego && (
+        <span
+          className="text-[10px] px-2 py-0.5 rounded-md font-medium bg-indigo-500/10 text-indigo-300 border border-indigo-500/30 flex items-center gap-1"
+          title="Modo de juego preferido"
+        >
+          {MODOS_LABEL[usuario.modo_juego] || usuario.modo_juego}
+        </span>
+      )}
 
       {estaVerificado && (
         <span
@@ -138,15 +154,8 @@ export default function ModalPerfilUsuario({ token, usuarioId, usuarioActual, on
   const esEntornoDiferente = Boolean(usuarioActual?.rango_edad && perfil?.rango_edad && esMenorMio !== esMenorPerfil);
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-card border border-white/10 rounded-2xl p-6 w-full max-w-md relative shadow-2xl">
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 text-white/50 hover:text-white text-lg transition cursor-pointer"
-        >
-          ✕
-        </button>
-
+    <Modal isOpen={Boolean(usuarioId)} onClose={onClose}>
+      <div>
         {cargando && <p className="text-white/50 text-center py-8">Cargando perfil...</p>}
         {error && <p className="text-repRojo text-center py-8">{error}</p>}
 
@@ -296,6 +305,6 @@ export default function ModalPerfilUsuario({ token, usuarioId, usuarioActual, on
           />
         )}
       </div>
-    </div>
+    </Modal>
   );
 }

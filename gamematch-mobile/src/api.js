@@ -120,6 +120,10 @@ export const perfilApi = {
 };
 
 export const authApi = {
+  registro: async (body) => {
+    const { data } = await api.post('/auth/registro', body);
+    return data;
+  },
   login: async (body) => {
     const { data } = await api.post('/auth/login', body);
     return data;
@@ -148,7 +152,7 @@ export const authApi = {
     const { data } = await api.post(`/salas/${salaId}/invitar`, datos);
     return data;
   },
-  perfilPublico: async (token, usuarioId) => {
+  perfilPublico: async (usuarioId) => {
     const { data } = await api.get(`/perfil/${usuarioId}`);
     return data;
   },
@@ -161,7 +165,6 @@ export const authApi = {
     const { data } = await api.get(`/juegos/steam-autocomplete?q=${encodeURIComponent(q)}`);
     return data;
   },
-
   guardarPushToken: async (push_token) => {
     const { data } = await api.put('/usuarios/push-token', { push_token });
     return data;
@@ -170,12 +173,10 @@ export const authApi = {
     const { data } = await api.get('/salas/invitaciones');
     return data;
   },
-
   unirseASala: async (salaId) => {
     const { data } = await api.post(`/salas/${salaId}/unirse`);
     return data;
   },
-
   rechazarInvitacion: async (notifId) => {
     const { data } = await api.delete(`/salas/invitaciones/${notifId}`);
     return data;
@@ -186,6 +187,35 @@ export const authApi = {
   },
   actualizarConfigNotificaciones: async (config) => {
     const { data } = await api.put('/usuarios/notificaciones-config', config);
+    return data;
+  },
+  obtenerMiPerfil: async () => {
+    const { data } = await api.get('/perfil/me');
+    return data;
+  },
+  actualizarPerfil: async (datosForm) => {
+    const { data } = await api.put('/perfil', datosForm);
+    return data;
+  },
+  vincularRiot: async (datosRiot) => {
+    const { data } = await api.post('/integraciones/riot', datosRiot);
+    return data;
+  },
+  desvincularRiot: async () => {
+    const { data } = await api.delete('/integraciones/riot');
+    return data;
+  },
+  vincularSteam: async (steamId) => {
+    const payload = typeof steamId === 'object' ? steamId : { steam_id: steamId };
+    const { data } = await api.post('/integraciones/steam', payload);
+    return data;
+  },
+  desvincularSteam: async () => {
+    const { data } = await api.delete('/integraciones/steam');
+    return data;
+  },
+  cancelarSuscripcion: async () => {
+    const { data } = await api.post('/suscripcion/cancelar');
     return data;
   },
 };

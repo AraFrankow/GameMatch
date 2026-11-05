@@ -1,5 +1,11 @@
 import React from 'react';
 
+const MODOS_LABEL = {
+  casual: 'Casual',
+  competitivo: 'Competitivo',
+  ambos: 'Casual & Competitivo',
+};
+
 export default function TarjetaJugador({ jugador, onVerPerfil, onBloquear, onReportar }) {
   const esPremium = Boolean(
     jugador.es_premium === true ||
@@ -53,9 +59,16 @@ export default function TarjetaJugador({ jugador, onVerPerfil, onBloquear, onRep
 
             <div className="text-left">
               <h3 className="text-white font-bold text-sm truncate max-w-[130px]">{jugador.username}</h3>
-              <p className="text-white/40 text-[11px]">
-                {jugador.rango_edad ? `Edad: ${jugador.rango_edad}` : 'Jugador GameMatch'}
-              </p>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <p className="text-white/40 text-[11px]">
+                  {jugador.rango_edad ? `Edad: ${jugador.rango_edad}` : 'Jugador GameMatch'}
+                </p>
+                {jugador.modo_juego && (
+                  <span className="text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-1.5 py-0.2 rounded text-[10px] font-medium">
+                    {MODOS_LABEL[jugador.modo_juego] || jugador.modo_juego}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 

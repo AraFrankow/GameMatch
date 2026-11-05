@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { authApi } from '../api';
-import { createPortal } from 'react-dom';
+import Modal from './Modal';
 
 export default function ModalReportarUsuario({ token, reportadoId, usernameReportado, onClose }) {
   const [motivo, setMotivo] = useState('Comportamiento tóxico');
@@ -34,20 +34,13 @@ export default function ModalReportarUsuario({ token, reportadoId, usernameRepor
     }
   };
 
-  return createPortal(
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
-      <div className="bg-card border border-white/10 rounded-2xl p-6 w-full max-w-md relative shadow-2xl space-y-4">
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 text-white/50 hover:text-white text-lg transition cursor-pointer"
-        >
-          ✕
-        </button>
-
-        <h3 className="text-white font-bold text-lg flex items-center gap-2">
-          <span>🚨</span> Reportar a @{usernameReportado}
-        </h3>
-
+  return (
+    <Modal 
+      isOpen={true} 
+      onClose={onClose} 
+      titulo={<><span>🚨</span> Reportar a @{usernameReportado}</>}
+    >
+      <div className="space-y-4">
         {exito ? (
           <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 p-4 rounded-xl text-center text-sm font-medium">
             Reporte enviado correctamente. Un administrador revisará el caso.
@@ -110,7 +103,6 @@ export default function ModalReportarUsuario({ token, reportadoId, usernameRepor
           </form>
         )}
       </div>
-    </div>,
-    document.body
+    </Modal>
   );
 }

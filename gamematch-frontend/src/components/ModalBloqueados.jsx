@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { authApi } from '../api';
+import Modal from './Modal';
 
 export default function ModalBloqueados({ token, onClose, onDesbloquear }) {
   const [bloqueados, setBloqueados] = useState([]);
@@ -39,19 +40,12 @@ export default function ModalBloqueados({ token, onClose, onDesbloquear }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
-      <div className="bg-card border border-white/10 rounded-2xl p-6 w-full max-w-md relative shadow-2xl space-y-4">
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 text-white/50 hover:text-white text-lg transition"
-        >
-          ✕
-        </button>
-
-        <h3 className="text-white font-bold text-lg flex items-center gap-2">
-          <span>🚫</span> Usuarios Bloqueados
-        </h3>
-
+    <Modal 
+      isOpen={true} 
+      onClose={onClose} 
+      titulo={<><span>🚫</span> Usuarios Bloqueados</>}
+    >
+      <div className="space-y-4">
         {cargando && <p className="text-white/50 text-center py-6 text-xs">Cargando lista...</p>}
         {error && <p className="text-red-400 text-center py-4 text-xs">{error}</p>}
 
@@ -81,7 +75,7 @@ export default function ModalBloqueados({ token, onClose, onDesbloquear }) {
 
                     <button
                       onClick={() => handleDesbloquear(usuarioId)}
-                      className="text-xs bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 px-3 py-1 rounded-lg transition font-medium"
+                      className="text-xs bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 px-3 py-1 rounded-lg transition font-medium cursor-pointer"
                     >
                       Desbloquear
                     </button>
@@ -92,6 +86,6 @@ export default function ModalBloqueados({ token, onClose, onDesbloquear }) {
           </div>
         )}
       </div>
-    </div>
+    </Modal>
   );
 }

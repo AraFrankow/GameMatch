@@ -42,7 +42,6 @@ async function enviarNotificacionPush({ usuarioIdTarget, titulo, cuerpo, data = 
       channelId: 'default',
       priority: 'high',
     }];
-    console.log(`[PUSH SENT] Enviando push a usuario ${usuarioIdTarget} | Token: ${usuarioTarget.push_token} | Tipo: ${tipo}`);
     const chunks = expo.chunkPushNotifications(messages);
     for (const chunk of chunks) {
       await expo.sendPushNotificationsAsync(chunk);

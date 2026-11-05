@@ -331,6 +331,14 @@ export default function HomeScreen({ navigation, campanita }) {
     const sinergiaRiot = obtenerValorNumero(item.sinergia_riot);
     const sinergiaSteam = obtenerValorNumero(item.sinergia_steam);
 
+    const modoJuegoTexto = item.modo_juego
+      ? item.modo_juego === 'casual'
+        ? 'Casual'
+        : item.modo_juego === 'competitivo'
+        ? 'Competitivo'
+        : 'Ambos'
+      : null;
+
     return (
       <View
         style={tw.style(
@@ -386,6 +394,7 @@ export default function HomeScreen({ navigation, campanita }) {
               </Text>
               <Text style={tw`text-[11px] text-slate-400`} numberOfLines={1}>
                 {item.rango_edad ? `Edad: ${item.rango_edad}` : 'Jugador GameMatch'}
+                {modoJuegoTexto ? ` · 🎮 ${modoJuegoTexto}` : ''}
               </Text>
             </View>
           </View>
@@ -528,7 +537,7 @@ export default function HomeScreen({ navigation, campanita }) {
       <View style={[tw`px-5 pb-4 bg-slate-800 border-b border-white/10`, { paddingTop: insets.top + 12 }]}>
         <View style={tw`flex-row items-center justify-between mb-3`}>
           <View style={tw`flex-1 mr-2`}>
-            <Text style={tw`text-2xl font-bold text-white`}>Buscar Dúo</Text>
+            <Text style={tw`text-2xl font-bold text-white`}>Buscá a tus compañeros</Text>
             <Text style={tw`text-[13px] text-slate-400 mt-0.5`}>Encontrá compañeros activos para jugar</Text>
           </View>
           {campanita}

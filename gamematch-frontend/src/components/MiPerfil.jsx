@@ -11,6 +11,12 @@ const RANGOS_EDAD = [
   { value: '36_mas', label: '36 o más' },
 ];
 
+const MODOS_JUEGO = [
+  { value: 'casual', label: 'Casual' },
+  { value: 'competitivo', label: 'Competitivo' },
+  { value: 'ambos', label: 'Ambos' },
+];
+
 export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver }) {
   const [perfil, setPerfil] = useState(null);
   const [editando, setEditando] = useState(false);
@@ -23,6 +29,7 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
     username: usuario?.username || '',
     foto_perfil: usuario?.foto_perfil || '',
     rango_edad: usuario?.rango_edad || '18_25',
+    modo_juego: usuario?.modo_juego || 'casual',
     biografia: usuario?.biografia || '',
   });
 
@@ -53,6 +60,7 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
           username: res.perfil.username || '',
           foto_perfil: res.perfil.foto_perfil || '',
           rango_edad: res.perfil.rango_edad || '18_25',
+          modo_juego: res.perfil.modo_juego || 'casual',
           biografia: res.perfil.biografia || '',
         });
       }
@@ -88,10 +96,11 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
 
     try {
       const res = await authApi.actualizarPerfil(token, form);
-      if (res.perfil) {
+      if (res.perfil || res.usuario) {
+        const u = res.perfil || res.usuario;
         setExito('Perfil actualizado con éxito');
         setEditando(false);
-        if (onActualizarUsuario) onActualizarUsuario(res.perfil);
+        if (onActualizarUsuario) onActualizarUsuario(u);
         cargarPerfil();
       }
     } catch (err) {
@@ -160,6 +169,7 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
   const edadMostrar = edadVerificada || usuario?.edad_estimada || perfil?.edad_estimada;
   const esMayorDeEdad = form.rango_edad !== 'menor_18';
   const rangoTexto = RANGOS_EDAD.find((r) => r.value === form.rango_edad)?.label || form.rango_edad;
+  const modoJuegoTexto = MODOS_JUEGO.find((m) => m.value === form.modo_juego)?.label || form.modo_juego;
 
   return (
     <div className="w-full max-w-4xl mx-auto p-4 sm:p-6 space-y-6">
@@ -213,9 +223,15 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
             </h2>
 
             <p className="text-white/50 text-xs mt-1">{usuario?.email}</p>
-            <span className="inline-block mt-2 bg-primary/20 text-primary border border-primary/30 text-[11px] font-semibold px-2.5 py-0.5 rounded-full">
-              {rangoTexto}
-            </span>
+            
+            <div className="flex gap-2 flex-wrap justify-center sm:justify-start mt-2">
+              <span className="bg-primary/20 text-primary border border-primary/30 text-[11px] font-semibold px-2.5 py-0.5 rounded-full">
+                {rangoTexto}
+              </span>
+              <span className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[11px] font-semibold px-2.5 py-0.5 rounded-full">
+                {modoJuegoTexto}
+              </span>
+            </div>
           </div>
 
           {!editando && (
@@ -225,7 +241,7 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
                 setExito('');
                 setError('');
               }}
-              className="bg-primary hover:bg-primary/90 text-white text-xs font-semibold px-4 py-2 rounded-xl transition shadow-md shrink-0"
+              className="bg-primary hover:bg-primary/90 text-white text-xs font-semibold px-4 py-2 rounded-xl transition shadow-md shrink-0 cursor-pointer"
             >
               Editar perfil
             </button>
@@ -287,7 +303,7 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
                           }
                         }
                       }}
-                      className="w-full md:w-auto text-xs bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 px-4 py-2 rounded-xl transition font-medium whitespace-nowrap text-center"
+                      className="w-full md:w-auto text-xs bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 px-4 py-2 rounded-xl transition font-medium whitespace-nowrap text-center cursor-pointer"
                     >
                       Cancelar renovación
                     </button>
@@ -372,7 +388,7 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
                     </div>
                     <button
                       onClick={() => setMostrarCamara(!mostrarCamara)}
-                      className="text-xs bg-primary hover:bg-primary/90 text-white px-3 py-1.5 rounded-lg transition font-medium"
+                      className="text-xs bg-primary hover:bg-primary/90 text-white px-3 py-1.5 rounded-lg transition font-medium cursor-pointer"
                     >
                       {mostrarCamara ? 'Ocultar' : 'Verificar ahora'}
                     </button>
@@ -447,14 +463,14 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
                     {!datosRiot ? (
                       <button
                         onClick={() => setMostrarRiotInput(!mostrarRiotInput)}
-                        className="text-xs bg-primary hover:bg-primary/90 text-white px-3 py-1.5 rounded-lg transition"
+                        className="text-xs bg-primary hover:bg-primary/90 text-white px-3 py-1.5 rounded-lg transition cursor-pointer"
                       >
                         {mostrarRiotInput ? 'Cancelar' : 'Vincular'}
                       </button>
                     ) : (
                       <button
                         onClick={() => handleDesvincular('riot')}
-                        className="text-xs bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 px-3 py-1 rounded-lg transition"
+                        className="text-xs bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 px-3 py-1 rounded-lg transition cursor-pointer"
                       >
                         Desvincular
                       </button>
@@ -496,14 +512,13 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
                       <button
                         type="submit"
                         disabled={cargandoIntegracion}
-                        className="w-full bg-primary hover:bg-primary/90 text-white text-xs py-1.5 rounded-lg font-medium transition disabled:opacity-50"
+                        className="w-full bg-primary hover:bg-primary/90 text-white text-xs py-1.5 rounded-lg font-medium transition disabled:opacity-50 cursor-pointer"
                       >
                         {cargandoIntegracion ? 'Verificando...' : 'Guardar Riot ID'}
                       </button>
                     </form>
                   )}
 
-                  {/* TARJETA DETALLADA DE ESTADÍSTICAS LOL */}
                   {datosRiot && (
                     <TarjetaRiot
                       riot={perfil?.riot || datosRiot}
@@ -533,28 +548,26 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
                     {!datosSteam ? (
                       <button
                         onClick={() => setMostrarSteamInput(!mostrarSteamInput)}
-                        className="text-xs bg-surface hover:bg-white/10 text-white border border-white/10 px-3 py-1.5 rounded-lg transition"
+                        className="text-xs bg-surface hover:bg-white/10 text-white border border-white/10 px-3 py-1.5 rounded-lg transition cursor-pointer"
                       >
                         {mostrarSteamInput ? 'Cancelar' : 'Vincular'}
                       </button>
                     ) : (
                       <button
                         onClick={() => handleDesvincular('steam')}
-                        className="text-xs bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 px-3 py-1 rounded-lg transition"
+                        className="text-xs bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 px-3 py-1 rounded-lg transition cursor-pointer"
                       >
                         Desvincular
                       </button>
                     )}
                   </div>
 
-                  {/* OPCIONES DE VINCULACIÓN */}
                   {mostrarSteamInput && !datosSteam && (
                     <div className="pt-3 border-t border-white/5 space-y-3">
-                      {/* BOTÓN OFICIAL CON OPENID */}
                       <button
                         type="button"
                         onClick={handleVincularSteamOficial}
-                        className="w-full bg-[#171a21] hover:bg-[#2a475e] text-white border border-[#66c0f4]/40 text-xs py-2.5 px-4 rounded-xl font-bold transition flex items-center justify-center gap-2.5 shadow-md group"
+                        className="w-full bg-[#171a21] hover:bg-[#2a475e] text-white border border-[#66c0f4]/40 text-xs py-2.5 px-4 rounded-xl font-bold transition flex items-center justify-center gap-2.5 shadow-md group cursor-pointer"
                       >
                         <svg 
                           className="w-4 h-4 fill-current text-[#66c0f4] shrink-0" 
@@ -571,7 +584,6 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
                         <div className="flex-grow border-t border-white/10"></div>
                       </div>
 
-                      {/* INGRESO MANUAL */}
                       <form onSubmit={handleVincularSteam} className="space-y-2">
                         <input
                           type="text"
@@ -584,7 +596,7 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
                         <button
                           type="submit"
                           disabled={cargandoIntegracion}
-                          className="w-full bg-primary hover:bg-primary/90 text-white text-xs py-1.5 rounded-lg font-medium transition disabled:opacity-50"
+                          className="w-full bg-primary hover:bg-primary/90 text-white text-xs py-1.5 rounded-lg font-medium transition disabled:opacity-50 cursor-pointer"
                         >
                           {cargandoIntegracion ? 'Importando juegos...' : 'Vincular por ID'}
                         </button>
@@ -666,7 +678,7 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
                 <button
                   type="button"
                   onClick={() => setTipoFoto('url')}
-                  className={`text-xs px-3 py-1 rounded-lg transition ${
+                  className={`text-xs px-3 py-1 rounded-lg transition cursor-pointer ${
                     tipoFoto === 'url'
                       ? 'bg-primary text-white font-semibold'
                       : 'bg-surface text-white/50 hover:text-white'
@@ -677,7 +689,7 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
                 <button
                   type="button"
                   onClick={() => setTipoFoto('archivo')}
-                  className={`text-xs px-3 py-1 rounded-lg transition ${
+                  className={`text-xs px-3 py-1 rounded-lg transition cursor-pointer ${
                     tipoFoto === 'archivo'
                       ? 'bg-primary text-white font-semibold'
                       : 'bg-surface text-white/50 hover:text-white'
@@ -712,7 +724,7 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
                 name="rango_edad"
                 value={form.rango_edad}
                 onChange={handleChange}
-                className="w-full bg-surface border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-primary transition"
+                className="w-full bg-surface border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-primary transition cursor-pointer"
               >
                 {RANGOS_EDAD.map((r) => {
                   const opcionBloqueada = esMayorDeEdad && r.value === 'menor_18';
@@ -722,6 +734,22 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
                     </option>
                   );
                 })}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs text-white/60 mb-1 font-medium">Modo de juego</label>
+              <select
+                name="modo_juego"
+                value={form.modo_juego}
+                onChange={handleChange}
+                className="w-full bg-surface border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-primary transition cursor-pointer"
+              >
+                {MODOS_JUEGO.map((m) => (
+                  <option key={m.value} value={m.value}>
+                    {m.label}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -741,14 +769,14 @@ export default function MiPerfil({ token, usuario, onActualizarUsuario, onVolver
               <button
                 type="button"
                 onClick={() => setEditando(false)}
-                className="bg-surface hover:bg-white/10 text-white/70 text-xs px-4 py-2 rounded-xl transition"
+                className="bg-surface hover:bg-white/10 text-white/70 text-xs px-4 py-2 rounded-xl transition cursor-pointer"
               >
                 Cancelar
               </button>
               <button
                 type="submit"
                 disabled={cargando}
-                className="bg-primary hover:bg-primary/90 text-white text-xs font-semibold px-5 py-2 rounded-xl transition disabled:opacity-50"
+                className="bg-primary hover:bg-primary/90 text-white text-xs font-semibold px-5 py-2 rounded-xl transition disabled:opacity-50 cursor-pointer"
               >
                 {cargando ? 'Guardando...' : 'Guardar cambios'}
               </button>
