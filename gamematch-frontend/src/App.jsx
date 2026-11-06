@@ -576,7 +576,13 @@ export default function App() {
 
                   <div className="flex justify-center">
                     {GOOGLE_CLIENT_ID ? (
-                      <GoogleLogin onSuccess={handleGoogleSuccess} onError={() => setError('No se pudo iniciar sesión con Google')} theme="filled_black" shape="pill" />
+                      <GoogleLogin
+                        onSuccess={handleGoogleSuccess}
+                        onError={() => setError('No se pudo iniciar sesión con Google')}
+                        theme="filled_black"
+                        shape="pill"
+                        ux_mode="redirect"
+                      />
                     ) : (
                       <p className="text-white/40 text-xs text-center">Falta VITE_GOOGLE_CLIENT_ID en el .env</p>
                     )}
