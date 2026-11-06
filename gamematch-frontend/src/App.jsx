@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
+import { GoogleOAuthProvider } from '@react-oauth/google';
 import { authApi } from './api';
 import Busqueda from './components/Busqueda';
 import Chat from './components/Chat';
@@ -140,6 +140,29 @@ export default function App() {
   const handleVerPerfil = (idUsuario) => {
     setPerfilVerId(idUsuario);
   };
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+
+    if (code) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+      setVista('auth');
+      setCargando(true);
+
+      authApi.google({ code })
+        .then((data) => {
+          guardarSesion(data.token, data.usuario);
+        })
+        .catch((err) => {
+          console.error('Error procesando el login de Google:', err);
+          setError(err.response?.data?.error || err.message || 'Error al autenticar con Google');
+        })
+        .finally(() => {
+          setCargando(false);
+        });
+    }
+  }, []);
 
   useEffect(() => {
     if (!sesion?.token) return;
@@ -357,20 +380,6 @@ export default function App() {
     }
   };
 
-  const handleGoogleSuccess = async (credentialResponse) => {
-    setError('');
-    try {
-      const data = await authApi.google({ id_token: credentialResponse.credential });
-      guardarSesion(data.token, data.usuario);
-    } catch (err) {
-      const mensajeBackend = err.response?.data?.error || err.message || '';
-      if (mensajeBackend.includes('rango_edad') || mensajeBackend.includes('modo_juego')) {
-        setGooglePendiente(credentialResponse.credential);
-      } else {
-        setError(mensajeBackend);
-      }
-    }
-  };
   const handleGoogleRedirect = () => {
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
     const redirectUri = `${window.location.origin}/google-callback`;
@@ -419,7 +428,7 @@ export default function App() {
   };
 
   if (!sesion) {
-    if (vista === 'landing') {
+    if (vista === 'landing' && !cargando) {
       return (
         <>
           <Landing
@@ -578,7 +587,7 @@ export default function App() {
                     )}
 
                     <button type="submit" disabled={cargando} className="w-full bg-primary hover:bg-primary/90 text-white font-medium rounded-lg py-2 transition disabled:opacity-50 mb-4">
-                      {cargando ? 'Cargando...' : modo === 'registro' ? 'Crear cuenta' : 'Entrar'}
+                      {cargando ? 'Iniciando sesión con Google...' : modo === 'registro' ? 'Crear cuenta' : 'Entrar'}
                     </button>
                   </form>
 
@@ -593,7 +602,8 @@ export default function App() {
                       <button
                         type="button"
                         onClick={handleGoogleRedirect}
-                        className="w-full py-2.5 px-4 rounded-xl bg-white text-black font-semibold flex items-center justify-center gap-2 hover:bg-gray-100 transition"
+                        disabled={cargando}
+                        className="w-full py-2.5 px-4 rounded-xl bg-white text-black font-semibold flex items-center justify-center gap-2 hover:bg-gray-100 transition disabled:opacity-50"
                       >
                         <img src="/google-icon.svg" alt="Google" className="w-5 h-5" />
                         Continuar con Google
