@@ -1,13 +1,21 @@
 const express = require('express');
 const router = express.Router();
-const { crearSala, listarMisSalas, invitar, unirse, listarInvitaciones, salir, rechazarInvitacion } = require('../controllers/salaController');
-const { obtenerHistorial } = require('../controllers/mensajeController');
+const { 
+  crearSala, 
+  listarMisSalas, 
+  invitar, 
+  unirse, 
+  listarInvitaciones, 
+  salir, 
+  rechazarInvitacion,
+  obtenerMensajesSala 
+} = require('../controllers/salaController');
 const { generarTokenVoz } = require('../controllers/vozController');
 const { verificarAuth } = require('../middleware/auth');
 
 router.get('/', verificarAuth, listarMisSalas);
 router.get('/invitaciones', verificarAuth, listarInvitaciones);
-router.get('/:id/mensajes', verificarAuth, obtenerHistorial);
+router.get('/:id/mensajes', verificarAuth, obtenerMensajesSala);
 router.get('/:id/token-voz', verificarAuth, generarTokenVoz);
 
 router.post('/', verificarAuth, crearSala);

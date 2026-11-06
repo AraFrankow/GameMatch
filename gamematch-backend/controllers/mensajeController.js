@@ -20,7 +20,7 @@ const obtenerHistorial = async (req, res) => {
         as: 'emisor', 
         attributes: ['id', 'username', 'foto_perfil', 'verificado'] 
       }],
-      order: [['createdAt', 'ASC']],
+      order: [['created_at', 'ASC']],
     });
 
     return res.json({ mensajes });
@@ -56,6 +56,16 @@ const crearMensaje = async (req, res) => {
       attributes: ['id', 'username', 'foto_perfil', 'verificado']
     });
 
+    const mensajeFormateado = {
+      ...nuevoMensaje.toJSON(),
+      emisor
+    };
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`sala_${sid}`).emit('mensaje_nuevo', mensajeFormateado);
+    }
+
     const destinatarios = await SalaParticipante.findAll({
       where: {
         sala_id: sid,
@@ -73,15 +83,10 @@ const crearMensaje = async (req, res) => {
           sala_id: sid,
           tipo: 'mensaje_nuevo'
         }
-      });
+      }).catch((err) => console.error('Error en notificación push:', err));
     });
 
-    return res.status(201).json({
-      mensaje: {
-        ...nuevoMensaje.toJSON(),
-        emisor
-      }
-    });
+    return res.status(201).json({ mensaje: mensajeFormateado });
   } catch (err) {
     console.error('Error en crearMensaje:', err);
     return res.status(500).json({ error: 'Error al enviar mensaje' });

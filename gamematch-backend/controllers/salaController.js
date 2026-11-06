@@ -1,4 +1,4 @@
-const { Sala, SalaParticipante, Usuario, Notificacion } = require('../models');
+const { Sala, SalaParticipante, Usuario, Notificacion, Mensaje } = require('../models'); // 👈 Agregado Mensaje
 const { existeBloqueoEntre } = require('./bloqueoController');
 const { Op } = require('sequelize');
 const { enviarNotificacionPush } = require('../services/pushService');
@@ -299,6 +299,25 @@ const rechazarInvitacion = async (req, res) => {
   }
 };
 
+const obtenerMensajesSala = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const mensajes = await Mensaje.findAll({
+      where: { sala_id: id },
+      include: [{
+        model: Usuario,
+        as: 'emisor',
+        attributes: ['id', 'username', 'foto_perfil', 'verificado']
+      }],
+      order: [['created_at', 'ASC']]
+    });
+    return res.json(mensajes);
+  } catch (error) {
+    console.error('Error al obtener mensajes:', error);
+    return res.status(500).json({ error: 'Error al obtener mensajes del historial' });
+  }
+};
+
 module.exports = { 
   crearSala, 
   listarMisSalas, 
@@ -307,5 +326,6 @@ module.exports = {
   listarInvitaciones, 
   salir, 
   esSegregacionValida, 
-  rechazarInvitacion 
+  rechazarInvitacion,
+  obtenerMensajesSala
 };

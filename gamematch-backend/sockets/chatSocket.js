@@ -15,6 +15,7 @@ const registrarChatSocket = (io) => {
     try {
       const token = socket.handshake.auth?.token;
       if (!token) return next(new Error('Token no provisto'));
+
       const payload = verificarToken(token);
       const usuario = await Usuario.findByPk(payload.id);
       if (!usuario) return next(new Error('Usuario no encontrado'));
@@ -129,7 +130,9 @@ const registrarChatSocket = (io) => {
 
         socket.usuario = usuarioDB;
 
-        if (!contenido || !contenido.trim()) return socket.emit('error_chat', { error: 'El mensaje no puede estar vacío' });
+        if (!contenido || !contenido.trim()) {
+          return socket.emit('error_chat', { error: 'El mensaje no puede estar vacío' });
+        }
 
         const sid = Number(sala_id);
         const participantes = await SalaParticipante.findAll({
@@ -144,7 +147,12 @@ const registrarChatSocket = (io) => {
         const esPart = participantes.some((p) => Number(p.usuario_id) === Number(uid));
         if (!esPart) return socket.emit('error_chat', { error: 'No sos participante de esta sala' });
 
-        const contenidoCensurado = await censurarConAPI(contenido, uid);
+        let contenidoCensurado = contenido;
+        try {
+          contenidoCensurado = await censurarConAPI(contenido, uid);
+        } catch (modErr) {
+          console.error('Error en API de censura, se procesa texto original:', modErr.message);
+        }
 
         const mensaje = await Mensaje.create({ 
           sala_id: sid, 
@@ -152,6 +160,8 @@ const registrarChatSocket = (io) => {
           contenido: contenidoCensurado, 
           bloqueado: false 
         });
+
+        socket.join(`sala_${sid}`);
 
         io.to(`sala_${sid}`).emit('mensaje_nuevo', {
           id: mensaje.id,
@@ -164,7 +174,7 @@ const registrarChatSocket = (io) => {
             foto_perfil: usuarioDB.foto_perfil,
             verificado: Boolean(usuarioDB.verificado)
           },
-          created_at: mensaje.createdAt || new Date()
+          created_at: mensaje.created_at || mensaje.createdAt || new Date()
         });
 
         const otrosParticipantes = participantes.filter((p) => Number(p.usuario_id) !== Number(uid));
@@ -186,7 +196,7 @@ const registrarChatSocket = (io) => {
         }
 
       } catch (err) {
-        console.error('Error en enviar_mensaje:', err);
+        console.error('Error crítico en enviar_mensaje:', err);
         socket.emit('error_chat', { error: 'Error al enviar el mensaje' });
       }
     });
