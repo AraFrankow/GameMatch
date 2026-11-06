@@ -29,6 +29,17 @@ const { registrarChatSocket } = require('./sockets/chatSocket');
 const app = express();
 const httpServer = http.createServer(app);
 
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
+
+const ALLOWED_ORIGINS = [
+  'http://localhost:5173',
+  'http://localhost:8081',
+  'http://localhost:19006',
+  process.env.FRONTEND_URL
+].filter(Boolean);
+
 const io = new Server(httpServer, {
   cors: {
     origin: (origin, callback) => callback(null, true),
@@ -53,7 +64,13 @@ io.use((socket, next) => {
 app.set('io', io);
 
 app.use(cors({
-  origin: (origin, callback) => callback(null, true),
+  origin: function (origin, callback) {
+    if (!origin || ALLOWED_ORIGINS.includes(origin) || origin.endsWith('.vercel.app')) {
+      callback(null, true);
+    } else {
+      callback(new Error('No permitido por CORS'));
+    }
+  },
   credentials: true
 }));
 

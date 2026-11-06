@@ -442,7 +442,7 @@ export default function App() {
 
     return (
       <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
-        <div className="min-h-screen bg-gm-gradient flex flex-col justify-between p-4">
+        <div className="min-h-screen bg-gm-gradient flex flex-col justify-between">
           <div className="w-full max-w-sm mx-auto my-auto py-8">
             <button
               onClick={() => setVista('landing')}
