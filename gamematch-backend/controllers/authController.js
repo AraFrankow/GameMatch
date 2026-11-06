@@ -93,6 +93,16 @@ const googleAuth = async (req, res) => {
   try {
     const { code, id_token, rango_edad, modo_juego } = req.body;
 
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+
+    if (!clientSecret) {
+      console.error('ERROR: GOOGLE_CLIENT_SECRET es undefined en el servidor.');
+      return res.status(500).json({ error: 'Falta configurar GOOGLE_CLIENT_SECRET en Render.' });
+    }
+
+    const client = new OAuth2Client(clientId, clientSecret);
+
     let googleIdToken = id_token;
 
     if (code) {
@@ -112,7 +122,7 @@ const googleAuth = async (req, res) => {
 
     const ticket = await client.verifyIdToken({
       idToken: googleIdToken,
-      audience: process.env.GOOGLE_CLIENT_ID,
+      audience: clientId,
     });
     
     const payload = ticket.getPayload();
