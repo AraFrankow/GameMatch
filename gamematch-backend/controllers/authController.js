@@ -4,7 +4,11 @@ const { OAuth2Client } = require('google-auth-library');
 const { Usuario } = require('../models');
 const { generarToken } = require('../utils/jwt');
 
-const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+const client = new OAuth2Client(
+  process.env.GOOGLE_CLIENT_ID,
+  process.env.GOOGLE_CLIENT_SECRET
+);
+
 const SALT_ROUNDS = 10;
 
 const verificarSuspension = (usuario) => {
@@ -92,9 +96,8 @@ const googleAuth = async (req, res) => {
     let googleIdToken = id_token;
 
     if (code) {
-      const redirectUri = process.env.FRONTEND_URL 
-        ? `${process.env.FRONTEND_URL}/google-callback` 
-        : 'http://localhost:5173/google-callback';
+      const baseUrl = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
+      const redirectUri = `${baseUrl}/google-callback`;
 
       const { tokens } = await client.getToken({
         code,
@@ -137,7 +140,7 @@ const googleAuth = async (req, res) => {
 
     return res.json({ token, usuario: usuarioPublico(usuario) });
   } catch (error) {
-    console.error('Error en googleAuth:', error);
+    console.error('Error detallado en googleAuth:', error.response?.data || error.message || error);
     return res.status(401).json({ error: 'Fallo en la autenticación con Google.' });
   }
 };
