@@ -1,7 +1,7 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { OAuth2Client } = require('google-auth-library');
-const { Usuario, AuthGoogle } = require('../models');
+const { Usuario } = require('../models');
 const { generarToken } = require('../utils/jwt');
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
@@ -87,31 +87,42 @@ const login = async (req, res) => {
 
 const googleAuth = async (req, res) => {
   try {
-    const { id_token, rango_edad, modo_juego } = req.body;
+    const { code, id_token, rango_edad, modo_juego } = req.body;
 
-    if (!id_token) {
-      return res.status(400).json({ error: 'Se requiere id_token' });
+    let googleIdToken = id_token;
+
+    if (code) {
+      const redirectUri = process.env.FRONTEND_URL 
+        ? `${process.env.FRONTEND_URL}/google-callback` 
+        : 'http://localhost:5173/google-callback';
+
+      const { tokens } = await client.getToken({
+        code,
+        redirect_uri: redirectUri,
+      });
+      googleIdToken = tokens.id_token;
+    }
+
+    if (!googleIdToken) {
+      return res.status(400).json({ error: 'Se requiere code o id_token de Google' });
     }
 
     const ticket = await client.verifyIdToken({
-      idToken: id_token,
+      idToken: googleIdToken,
       audience: process.env.GOOGLE_CLIENT_ID,
     });
+    
     const payload = ticket.getPayload();
     const { email, name, picture, sub } = payload;
 
     let usuario = await Usuario.findOne({ where: { email } });
 
     if (!usuario) {
-      if (!rango_edad || !modo_juego) {
-        return res.status(400).json({ error: 'rango_edad y modo_juego son requeridos para la creación de cuenta.' });
-      }
-
       usuario = await Usuario.create({
         username: name.replace(/\s+/g, '').toLowerCase() + Math.floor(Math.random() * 1000),
         email,
         foto_perfil: picture,
-        rango_edad,
+        rango_edad: rango_edad || '18_25',
         modo_juego: modo_juego || 'casual',
         google_id: sub,
       });
@@ -122,16 +133,12 @@ const googleAuth = async (req, res) => {
       return res.status(403).json({ error: mensajeSuspension });
     }
 
-    const token = jwt.sign(
-      { id: usuario.id, rol: usuario.rol || 'usuario' },
-      process.env.JWT_SECRET || 'secreto',
-      { expiresIn: '7d' }
-    );
+    const token = generarToken({ id: usuario.id, rol: usuario.rol });
 
     return res.json({ token, usuario: usuarioPublico(usuario) });
   } catch (error) {
     console.error('Error en googleAuth:', error);
-    return res.status(401).json({ error: 'Token de Google inválido o fallo en autenticación.' });
+    return res.status(401).json({ error: 'Fallo en la autenticación con Google.' });
   }
 };
 

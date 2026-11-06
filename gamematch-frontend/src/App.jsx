@@ -371,6 +371,20 @@ export default function App() {
       }
     }
   };
+  const handleGoogleRedirect = () => {
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    const redirectUri = `${window.location.origin}/google-callback`;
+    const scope = 'openid email profile';
+    
+    const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+      `client_id=${clientId}&` +
+      `redirect_uri=${encodeURIComponent(redirectUri)}&` +
+      `response_type=code&` +
+      `scope=${encodeURIComponent(scope)}&` +
+      `prompt=select_account`;
+
+    window.location.href = googleAuthUrl;
+  };
 
   const completarGoogleConDatos = async () => {
     setError('');
@@ -576,13 +590,14 @@ export default function App() {
 
                   <div className="flex justify-center">
                     {GOOGLE_CLIENT_ID ? (
-                      <GoogleLogin
-                        onSuccess={handleGoogleSuccess}
-                        onError={() => setError('No se pudo iniciar sesión con Google')}
-                        theme="filled_black"
-                        shape="pill"
-                        ux_mode="redirect"
-                      />
+                      <button
+                        type="button"
+                        onClick={handleGoogleRedirect}
+                        className="w-full py-2.5 px-4 rounded-xl bg-white text-black font-semibold flex items-center justify-center gap-2 hover:bg-gray-100 transition"
+                      >
+                        <img src="/google-icon.svg" alt="Google" className="w-5 h-5" />
+                        Continuar con Google
+                      </button>
                     ) : (
                       <p className="text-white/40 text-xs text-center">Falta VITE_GOOGLE_CLIENT_ID en el .env</p>
                     )}

@@ -32,6 +32,8 @@ const httpServer = http.createServer(app);
 if (process.env.NODE_ENV === 'production') {
   app.set('trust proxy', 1);
 }
+app.get('/', (req, res) => res.status(200).json({ status: 'GameMatch API corriendo' }));
+app.get('/health', (req, res) => res.status(200).send('OK'));
 
 const ALLOWED_ORIGINS = [
   'http://localhost:5173',
@@ -160,7 +162,6 @@ io.on('connection', async (socket) => {
   });
 });
 
-app.get('/', (req, res) => res.json({ status: 'GameMatch API corriendo' }));
 app.use((req, res) => res.status(404).json({ error: 'Ruta no encontrada' }));
 app.use((err, req, res, next) => {
   console.error('Error no capturado:', err.stack);
@@ -169,18 +170,14 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 3000;
 
-const iniciar = async () => {
-  try {
-    await sequelize.authenticate();
-    console.log('Conexión a la base de datos OK');
-    
-    httpServer.listen(PORT, '0.0.0.0', () => {
-      console.log(`🚀 Servidor + WebSocket corriendo en Puerto ${PORT}`);
+httpServer.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Servidor HTTP + WebSockets activo en el puerto ${PORT}`);
+  
+  sequelize.authenticate()
+    .then(() => {
+      console.log('Conexión con la base de datos Aiven establecida con éxito.');
+    })
+    .catch((err) => {
+      console.error('Error de conexión con Aiven MySQL:', err.message);
     });
-  } catch (err) {
-    console.error('No se pudo conectar a la base de datos:', err.message);
-    process.exit(1);
-  }
-};
-
-iniciar();
+});
