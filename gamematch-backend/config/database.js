@@ -15,6 +15,12 @@ const sequelize = new Sequelize(
         require: true,
         rejectUnauthorized: false
       }
+    },
+    define: {
+      timestamps: true,
+      underscored: true,
+      createdAt: 'created_at',
+      updatedAt: 'updated_at'
     }
   }
 );
