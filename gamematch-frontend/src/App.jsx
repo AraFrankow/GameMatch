@@ -363,8 +363,12 @@ export default function App() {
       const data = await authApi.google({ id_token: credentialResponse.credential });
       guardarSesion(data.token, data.usuario);
     } catch (err) {
-      if (err.message.includes('rango_edad') || err.message.includes('modo_juego')) setGooglePendiente(credentialResponse.credential);
-      else setError(err.message);
+      const mensajeBackend = err.response?.data?.error || err.message || '';
+      if (mensajeBackend.includes('rango_edad') || mensajeBackend.includes('modo_juego')) {
+        setGooglePendiente(credentialResponse.credential);
+      } else {
+        setError(mensajeBackend);
+      }
     }
   };
 
