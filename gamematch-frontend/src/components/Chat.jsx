@@ -93,7 +93,10 @@ export default function Chat({
       const salaActivaId = salaActivaRef.current ? Number(salaActivaRef.current.id) : null;
 
       if (salaActivaId && msgSalaId === salaActivaId) {
-        setMensajes((prev) => [...prev, msg]);
+        setMensajes((prev) => {
+          if (prev.some((m) => Number(m.id) === Number(msg.id))) return prev;
+          return [...prev, msg];
+        });
       }
     };
 
@@ -142,7 +145,7 @@ export default function Chat({
       const res = await authApi.buscarUsuarios(token, val.trim());
       const lista = res.usuarios || [];
       
-      setSugerencias(lista.filter((u) => u.id !== usuario.id));
+      setSugerencias(lista.filter((u) => Number(u.id) !== Number(usuario.id)));
     } catch (err) {
       console.error('Error al buscar sugerencias:', err);
     } finally {
@@ -163,7 +166,8 @@ export default function Chat({
 
     try {
       const data = await authApi.historialMensajes(token, sala.id);
-      setMensajes(data.mensajes || []);
+      const listaMensajes = Array.isArray(data) ? data : (data?.mensajes || []);
+      setMensajes(listaMensajes);
       socket.emit('unirse_sala', { sala_id: sala.id });
     } catch (err) {
       setError(err.message);
@@ -209,15 +213,15 @@ export default function Chat({
   };
 
   const otroUsuario = salaActiva?.tipo === 'privada'
-    ? salaActiva.participantes?.find((p) => (p.usuario_id || p.id) !== usuario.id) ||
-      salaActiva.Usuarios?.find((u) => u.id !== usuario.id)
+    ? salaActiva.participantes?.find((p) => Number(p.usuario_id || p.id) !== Number(usuario.id)) ||
+      salaActiva.Usuarios?.find((u) => Number(u.id) !== Number(usuario.id))
     : null;
 
   const otroVerificado = Boolean(otroUsuario?.verificado);
 
   const listaMiembros = salaActiva?.tipo === 'grupal'
     ? (salaActiva.participantes || salaActiva.Usuarios || []).map((p) => ({
-        id: p.usuario_id || p.id || p.Usuario?.id,
+        id: Number(p.usuario_id || p.id || p.Usuario?.id),
         username: p.username || p.Usuario?.username || 'Usuario',
         foto_perfil: p.foto_perfil || p.Usuario?.foto_perfil,
         verificado: Boolean(p.verificado || p.Usuario?.verificado),
@@ -234,7 +238,7 @@ export default function Chat({
       if (salaActiva?.tipo === 'privada') {
         haySinVerificar = !otroVerificado;
       } else if (salaActiva?.tipo === 'grupal') {
-        haySinVerificar = listaMiembros.some((m) => m.id !== usuario.id && !m.verificado);
+        haySinVerificar = listaMiembros.some((m) => Number(m.id) !== Number(usuario.id) && !m.verificado);
       }
 
       if (haySinVerificar) {
@@ -327,7 +331,7 @@ export default function Chat({
         <div className="flex-1 overflow-y-auto space-y-1 min-h-0">
           {salas.map((s) => {
             const otro = s.tipo === 'privada'
-              ? s.participantes?.find((p) => (p.usuario_id || p.id) !== usuario.id) || s.Usuarios?.find((u) => u.id !== usuario.id)
+              ? s.participantes?.find((p) => Number(p.usuario_id || p.id) !== Number(usuario.id)) || s.Usuarios?.find((u) => Number(u.id) !== Number(usuario.id))
               : null;
             const cantidadNoLeidos = mensajesNoLeidos[s.id] || 0;
             const esOtroVerificado = Boolean(otro?.verificado);
@@ -337,7 +341,7 @@ export default function Chat({
                 key={s.id}
                 onClick={() => entrarASala(s)}
                 className={`w-full text-left px-3 py-2 rounded-lg text-sm transition flex items-center justify-between ${
-                  salaActiva?.id === s.id ? 'bg-primary text-white' : 'text-white/70 hover:bg-white/5'
+                  Number(salaActiva?.id) === Number(s.id) ? 'bg-primary text-white' : 'text-white/70 hover:bg-white/5'
                 }`}
               >
                 <span className="truncate flex items-center gap-1.5">
@@ -345,7 +349,7 @@ export default function Chat({
                   {esOtroVerificado && <span className="text-emerald-400 text-xs">✓</span>}
                 </span>
 
-                {cantidadNoLeidos > 0 && salaActiva?.id !== s.id && (
+                {cantidadNoLeidos > 0 && Number(salaActiva?.id) !== Number(s.id) && (
                   <span className="bg-repRojo text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full ml-2 shrink-0 animate-pulse">
                     {cantidadNoLeidos}
                   </span>
@@ -524,12 +528,13 @@ export default function Chat({
 
             {/* Historial de Mensajes */}
             <div ref={mensajesRef} className="flex-1 overflow-y-auto p-4 space-y-2 min-h-0">
-              {mensajes.map((m) => {
-                const esMio = (m.emisor?.id || m.emisor_id) === usuario.id;
+              {mensajes.map((m, index) => {
+                const emisorId = m.emisor?.id || m.emisor_id;
+                const esMio = Number(emisorId) === Number(usuario.id);
                 const esEmisorVerificado = Boolean(m.emisor?.verificado);
 
                 return (
-                  <div key={m.id} className={`flex ${esMio ? 'justify-end' : 'justify-start'}`}>
+                  <div key={m.id || `msg-${index}`} className={`flex ${esMio ? 'justify-end' : 'justify-start'}`}>
                     <div className={`max-w-xs rounded-xl px-3 py-2 text-sm ${esMio ? 'bg-primary text-white' : 'bg-card text-white/90 border border-white/5'}`}>
                       {!esMio && (
                         <p className="text-xs text-primary/80 font-semibold mb-0.5 flex items-center gap-1">
@@ -587,11 +592,11 @@ export default function Chat({
                       )}
                     </div>
                     <span className="text-white text-xs font-medium flex items-center gap-1.5">
-                      {m.username} {m.id === usuario.id ? '(Tú)' : ''}
+                      {m.username} {Number(m.id) === Number(usuario.id) ? '(Tú)' : ''}
                       <BadgeVerificado verificado={m.verificado} edadEstimada={m.edad_estimada} />
                     </span>
                   </div>
-                  {m.id !== usuario.id && (
+                  {Number(m.id) !== Number(usuario.id) && (
                     <button
                       onClick={() => {
                         setModalMiembros(false);

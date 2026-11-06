@@ -23,10 +23,10 @@ const obtenerHistorial = async (req, res) => {
       order: [['created_at', 'ASC']],
     });
 
-    return res.json({ mensajes });
+    return res.json({ mensajes, ok: true }); 
   } catch (err) {
-    console.error('Error en obtenerHistorial:', err);
-    return res.status(500).json({ error: 'Error al obtener historial de mensajes' });
+    console.error('Error crítico en obtenerHistorial:', err);
+    return res.status(500).json({ error: 'Error al obtener historial' });
   }
 };
 

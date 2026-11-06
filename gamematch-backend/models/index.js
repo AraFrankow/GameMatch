@@ -50,10 +50,10 @@ Sala.hasMany(SalaParticipante, { foreignKey: 'sala_id', as: 'salaParticipantes',
 SalaParticipante.belongsTo(Sala, { foreignKey: 'sala_id', as: 'sala' });
 SalaParticipante.belongsTo(Usuario, { foreignKey: 'usuario_id', as: 'usuario' });
 
-Sala.hasMany(Mensaje, { foreignKey: 'sala_id', as: 'mensajes', onDelete: 'CASCADE' });
-Mensaje.belongsTo(Sala, { foreignKey: 'sala_id', as: 'sala' });
-Usuario.hasMany(Mensaje, { foreignKey: 'emisor_id', as: 'mensajesEnviados', onDelete: 'CASCADE' });
 Mensaje.belongsTo(Usuario, { foreignKey: 'emisor_id', as: 'emisor' });
+Usuario.hasMany(Mensaje, { foreignKey: 'emisor_id', as: 'mensajes' });
+Mensaje.belongsTo(Sala, { foreignKey: 'sala_id', as: 'sala' });
+Sala.hasMany(Mensaje, { foreignKey: 'sala_id', as: 'mensajes' });
 
 Usuario.hasMany(Reputacion, { foreignKey: 'evaluador_id', as: 'votosEmitidos', onDelete: 'CASCADE' });
 Usuario.hasMany(Reputacion, { foreignKey: 'evaluado_id', as: 'votosRecibidos', onDelete: 'CASCADE' });
