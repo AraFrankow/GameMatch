@@ -1,7 +1,7 @@
 import { io } from 'socket.io-client';
 import { storage } from './storage';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://gamematch-947f.onrender.com/api';
 const SOCKET_URL = API_URL.replace(/\/api\/?$/, '');
 
 let socket = null;
@@ -9,13 +9,19 @@ let socket = null;
 export const conectarSocket = async () => {
   const token = await storage.obtener('token');
 
-  if (!socket || !socket.connected) {
-    socket = io(SOCKET_URL, {
-      auth: { token },
-      transports: ['websocket'],
-      autoConnect: true,
-    });
+  if (socket) {
+    socket.auth = { token };
+    if (!socket.connected) {
+      socket.connect();
+    }
+    return socket;
   }
+
+  socket = io(SOCKET_URL, {
+    auth: { token },
+    transports: ['websocket'],
+    autoConnect: true,
+  });
 
   return socket;
 };

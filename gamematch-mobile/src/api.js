@@ -2,10 +2,11 @@ import { storage } from './services/storage';
 import axios from 'axios';
 import { Alert } from 'react-native';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://gamematch-947f.onrender.com/api';
 
 const api = axios.create({
   baseURL: API_URL,
+  timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
   },
