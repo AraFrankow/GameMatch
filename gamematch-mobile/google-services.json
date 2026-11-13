@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "816071412382",
+    "project_id": "gamematch-6dbd0",
+    "storage_bucket": "gamematch-6dbd0.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:816071412382:android:723be366e82ceed3ce098f",
+        "android_client_info": {
+          "package_name": "com.gamematch.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBh3i-VpoqOwVYxy3fhTFaYaOXnLKK6AP0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
